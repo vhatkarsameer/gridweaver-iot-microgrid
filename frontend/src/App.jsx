@@ -1,122 +1,115 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import React, { useEffect, useState } from 'react';
+import { Client } from '@stomp/stompjs';
+import './App.css';
 
 function App() {
-  const [count, setCount] = useState(0)
+  // Map of unique devices keyed by deviceId
+  const [deviceMap, setDeviceMap] = useState({});
+  const [connected, setConnected] = useState(false);
+
+  useEffect(() => {
+    const client = new Client({
+      brokerURL: 'ws://localhost:8080/ws-grid',
+      reconnectDelay: 5000,
+      onConnect: () => {
+        setConnected(true);
+        console.log('Connected to GridWeaver WebSocket Broker');
+
+        client.subscribe('/topic/telemetry', (message) => {
+          if (message.body) {
+            const payload = JSON.parse(message.body);
+
+            // Update or insert the device by its unique deviceId
+            setDeviceMap((prevMap) => ({
+              ...prevMap,
+              [payload.deviceId]: payload,
+            }));
+          }
+        });
+      },
+      onDisconnect: () => {
+        setConnected(false);
+      },
+    });
+
+    client.activate();
+
+    return () => {
+      client.deactivate();
+    };
+  }, []);
+
+  // Convert device map to array for rendering
+  const devices = Object.values(deviceMap);
+
+  // Calculate live aggregate stats across all unique devices
+  const totalWatts = devices.reduce((sum, d) => sum + d.outputWatts, 0);
+  const solarCount = devices.filter((d) => d.deviceType === 'SOLAR_PANEL').length;
+  const batteryCount = devices.filter((d) => d.deviceType === 'BATTERY').length;
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
+    <div className="dashboard-container">
+      <header className="dashboard-header">
+        <h1>⚡ GridWeaver Microgrid Control</h1>
+        <div className={`status-badge ${connected ? 'online' : 'offline'}`}>
+          {connected ? '● LIVE STREAM CONNECTED' : '○ DISCONNECTED'}
         </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+      </header>
 
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
+      {/* Grid Stats Cards */}
+      <div className="stats-grid">
+        <div className="stat-card">
+          <h3>Total Power Output</h3>
+          <p className="stat-value">{totalWatts.toFixed(1)} W</p>
         </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
+        <div className="stat-card">
+          <h3>Active Solar Units</h3>
+          <p className="stat-value">{solarCount}</p>
         </div>
-      </section>
+        <div className="stat-card">
+          <h3>Active Battery Units</h3>
+          <p className="stat-value">{batteryCount}</p>
+        </div>
+      </div>
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+      {/* Live Device Status Registry Table */}
+      <div className="feed-section">
+        <h2>Live Microgrid Device Registry ({devices.length} Devices Online)</h2>
+        <div className="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Device ID</th>
+                <th>Type</th>
+                <th>Status</th>
+                <th>Current Output</th>
+                <th>Battery Level</th>
+                <th>GIS Coordinates</th>
+                <th>Last Ping</th>
+              </tr>
+            </thead>
+            <tbody>
+              {devices.map((item) => (
+                <tr key={item.deviceId}>
+                  <td><strong>{item.deviceId}</strong></td>
+                  <td>{item.deviceType}</td>
+                  <td>
+                    <span className={`status-tag ${item.status.toLowerCase()}`}>
+                      {item.status}
+                    </span>
+                  </td>
+                  <td>{item.outputWatts.toFixed(1)} W</td>
+                  <td>{item.batteryLevelPct > 0 ? `${item.batteryLevelPct.toFixed(1)}%` : 'N/A'}</td>
+                  <td>{item.latitude.toFixed(4)}, {item.longitude.toFixed(4)}</td>
+                  <td>{new Date(item.timestamp).toLocaleTimeString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
 }
 
-export default App
+export default App;

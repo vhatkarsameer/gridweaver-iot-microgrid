@@ -53,8 +53,5 @@ public class IotSimulatorService {
         //Broadcase payloads to the WebSocket topic /topic/telemetry
         messagingTemplate.convertAndSend("/topic/telemetry", solarPayload);
         messagingTemplate.convertAndSend("/topic/telemetry", batteryPayload);
-
-        System.out.println("\uD83D\uDCE1 [VirtualThread-Broadcast] Sent telemetry pings for "
-                            + solarPayload.deviceId() + " and " + batteryPayload.deviceId());
     }
 }
