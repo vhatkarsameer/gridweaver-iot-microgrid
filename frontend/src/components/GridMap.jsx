@@ -1,17 +1,16 @@
 import { MapContainer, TileLayer } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 
-import DeviceMarker from "./DeviceMarker";
-import { mockTelemetry } from "../data/mockTelemetry";
-import type { TelemetryPayload } from "../types/telemetry";
+import DeviceMarker from "./DeviceMarker.jsx";
+import { mockTelemetry } from "../data/mockTelemetry.js";
 
-interface GridMapProps {
-  onDeviceSelect?: (telemetry: TelemetryPayload) => void;
-}
+const MUMBAI_CENTER = [19.076, 72.8777];
 
-const MUMBAI_CENTER: [number, number] = [19.076, 72.8777];
+export default function GridMap({ telemetry, onDeviceSelect }) {
+  const devices = Array.isArray(telemetry) && telemetry.length > 0
+    ? telemetry
+    : mockTelemetry;
 
-export default function GridMap({ onDeviceSelect }: GridMapProps) {
   return (
     <section
       aria-label="Mumbai microgrid map"
@@ -36,10 +35,10 @@ export default function GridMap({ onDeviceSelect }: GridMapProps) {
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
 
-        {mockTelemetry.map((telemetry ) => (
+        {devices.map((device ) => (
           <DeviceMarker
-            key={telemetry.deviceId}
-            telemetry={telemetry}
+            key={device.deviceId}
+            telemetry={device}
             onSelect={onDeviceSelect}
           />
         ))}
