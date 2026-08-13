@@ -27,10 +27,29 @@ function formatPower(outputWatts) {
   return `${(Number(outputWatts || 0) / 1000).toFixed(1)} kW`;
 }
 
+function formatTimestamp(timestamp) {
+  if (!timestamp) {
+    return "Unavailable";
+  }
+
+  const date = new Date(timestamp);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Invalid timestamp";
+  }
+
+  return new Intl.DateTimeFormat("en-IN", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Asia/Kolkata",
+  }).format(date);
+}
+
 export default function DeviceMarker({ telemetry, onSelect }) {
   const color = statusColors[telemetry.status] || "#64748b";
   const symbol = deviceSymbols[telemetry.deviceType] || "•";
-  const deviceLabel = deviceLabels[telemetry.deviceType] || telemetry.deviceType;
+  const deviceLabel =
+    deviceLabels[telemetry.deviceType] || telemetry.deviceType;
 
   const markerIcon = useMemo(
     () =>
@@ -69,12 +88,14 @@ export default function DeviceMarker({ telemetry, onSelect }) {
       icon={markerIcon}
       eventHandlers={{
         click: () => {
-          if (onSelect) onSelect(telemetry);
+          if (onSelect) {
+            onSelect(telemetry);
+          }
         },
       }}
     >
       <Popup>
-        <div style={{ minWidth: "210px", fontFamily: "Arial, sans-serif" }}>
+        <div style={{ minWidth: "220px", fontFamily: "Arial, sans-serif" }}>
           <strong style={{ fontFamily: "monospace", fontSize: "15px" }}>
             {telemetry.deviceId}
           </strong>
@@ -105,10 +126,25 @@ export default function DeviceMarker({ telemetry, onSelect }) {
             </dd>
 
             <dt>Latitude</dt>
-            <dd style={{ margin: 0 }}>{telemetry.latitude.toFixed(4)}</dd>
+            <dd style={{ margin: 0 }}>
+              {Number(telemetry.latitude).toFixed(4)}
+            </dd>
 
             <dt>Longitude</dt>
-            <dd style={{ margin: 0 }}>{telemetry.longitude.toFixed(4)}</dd>
+            <dd style={{ margin: 0 }}>
+              {Number(telemetry.longitude).toFixed(4)}
+            </dd>
+
+            <dt>Last updated</dt>
+            <dd
+              style={{
+                margin: 0,
+                textAlign: "right",
+                fontSize: "12px",
+              }}
+            >
+              {formatTimestamp(telemetry.timestamp)}
+            </dd>
           </dl>
         </div>
       </Popup>
