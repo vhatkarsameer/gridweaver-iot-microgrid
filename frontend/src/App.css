@@ -1,0 +1,267 @@
+.dashboard-container {
+  width: 100vw;
+  min-height: 100vh;
+  padding: 1.5rem 2rem;
+  box-sizing: border-box;
+  background-color: #0f172a;
+  color: #f8fafc;
+  margin: 0;
+}
+
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid #334155;
+  padding-bottom: 1rem;
+  width: 100%;
+}
+
+.subtitle {
+  margin: 0.25rem 0 0 0;
+  color: #94a3b8;
+  font-size: 0.85rem;
+}
+
+.status-badge {
+  padding: 0.4rem 0.8rem;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: bold;
+}
+
+.status-badge.online {
+  background-color: #064e3b;
+  color: #34d399;
+  border: 1px solid #059669;
+}
+
+.status-badge.offline {
+  background-color: #7f1d1d;
+  color: #f87171;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.25rem;
+  margin-bottom: 1.5rem;
+  width: 100%;
+}
+
+.stat-card {
+  background-color: #1e293b;
+  padding: 1rem 1.25rem;
+  border-radius: 10px;
+  border: 1px solid #334155;
+}
+
+.stat-card h3 {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #94a3b8;
+}
+
+.stat-value {
+  font-size: 1.6rem;
+  font-weight: bold;
+  margin: 0.25rem 0 0 0;
+  color: #38bdf8;
+}
+
+.stat-value.watts { color: #34d399; }
+.stat-value.battery { color: #f59e0b; }
+
+.control-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  background-color: #1e293b;
+  padding: 0.75rem 1rem;
+  border-radius: 10px;
+  border: 1px solid #334155;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.search-box {
+  position: relative;
+  flex: 1;
+}
+
+.search-box input {
+  width: 100%;
+  padding: 0.6rem 2.2rem 0.6rem 0.8rem;
+  background-color: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  color: #f8fafc;
+  font-size: 0.85rem;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.search-box input:focus {
+  border-color: #38bdf8;
+}
+
+.clear-btn {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.filter-group {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.filter-btn {
+  background-color: #0f172a;
+  border: 1px solid #334155;
+  color: #94a3b8;
+  padding: 0.5rem 0.8rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.filter-btn.active, .filter-btn:hover {
+  background-color: #38bdf8;
+  color: #0f172a;
+  font-weight: bold;
+}
+
+.feed-section h2 {
+  font-size: 1.1rem;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.count-badge {
+  font-size: 0.75rem;
+  background-color: #334155;
+  color: #cbd5e1;
+  padding: 0.2rem 0.6rem;
+  border-radius: 12px;
+  font-weight: normal;
+}
+
+/* Full-bleed 2D Grid with strict boundary controls */
+.household-2d-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 0.85rem;
+  width: 100%;
+}
+
+.house-card {
+  background-color: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 0.75rem;
+  box-sizing: border-box;
+  overflow: hidden; /* Prevent any inner overflow */
+}
+
+.house-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #334155;
+  padding-bottom: 0.35rem;
+  margin-bottom: 0.5rem;
+}
+
+.house-id {
+  font-weight: bold;
+  font-size: 0.85rem;
+  color: #38bdf8;
+}
+
+.gps-tag {
+  font-size: 0.65rem;
+  color: #64748b;
+}
+
+.device-specs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Device Box constraints to stop overflow */
+.device-box {
+  background-color: #0f172a;
+  padding: 0.5rem;
+  border-radius: 5px;
+  border: 1px solid #1e293b;
+  box-sizing: border-box;
+  min-width: 0; /* Prevents grid items from expanding past parent width */
+  overflow: hidden;
+}
+
+.device-title {
+  font-size: 0.65rem;
+  color: #94a3b8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.device-value {
+  font-size: 0.85rem;
+  font-weight: bold;
+  color: #f8fafc;
+  margin-top: 0.15rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.device-value.offline {
+  font-size: 0.75rem;
+  color: #64748b;
+  font-weight: normal;
+}
+
+.battery-level {
+  font-size: 0.65rem;
+  color: #fbbf24;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Status Tag text boundaries */
+.status-tag {
+  display: inline-block;
+  margin-top: 0.25rem;
+  padding: 0.1rem 0.3rem;
+  border-radius: 3px;
+  font-size: 0.55rem;
+  font-weight: bold;
+  max-width: 100%;
+  box-sizing: border-box;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.status-tag.generating { background: #065f46; color: #6ee7b7; }
+.status-tag.charging { background: #1e40af; color: #93c5fd; }
+.status-tag.discharging { background: #9a3412; color: #fdba74; }
