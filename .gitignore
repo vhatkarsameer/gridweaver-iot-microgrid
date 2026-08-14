@@ -1,0 +1,22 @@
+# Maven
+target/
+
+# IntelliJ IDEA
+.idea/
+*.iml
+
+# OS Files
+.DS_Store
+
+# Maven Wrapper Logs
+.mvn/wrapper/maven-wrapper.jar
+
+# Logs
+*.log
+
+# Node (React frontend)
+frontend/node_modules/
+frontend/dist/
+
+# Environment Files
+.env
