@@ -20,14 +20,17 @@ import java.util.concurrent.Executors;
 public class IotSimulatorService {
 
     private final SimpMessagingTemplate messagingTemplate;
+    private final GridStateEngine gridStateEngine;
+
     private final double baseLat = 19.0760; // Central Mumbai Latitude
     private final double baseLng = 72.8777; // Central Mumbai Longitude
 
     // Holds 5,000 fixed household DTOs mapped on startup
     private final List<HouseholdLocation> households = new ArrayList<>();
 
-    public IotSimulatorService(SimpMessagingTemplate messagingTemplate) {
+    public IotSimulatorService(SimpMessagingTemplate messagingTemplate, GridStateEngine gridStateEngine) {
         this.messagingTemplate = messagingTemplate;
+        this.gridStateEngine = gridStateEngine;
     }
 
     /**
@@ -97,6 +100,8 @@ public class IotSimulatorService {
                             Instant.now()
                     );
                 }
+
+                gridStateEngine.ingestTelemetry(payload);
 
                 // Broadcast payload to WebSocket topic
                 messagingTemplate.convertAndSend("/topic/telemetry", payload);
