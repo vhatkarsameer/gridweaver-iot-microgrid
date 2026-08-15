@@ -13,7 +13,8 @@ function App() {
 
   useEffect(() => {
     const client = new Client({
-      brokerURL: "ws://localhost:8080/ws-grid",
+      brokerURL: "ws://localhost:8080/ws-telemetry",
+ 
       reconnectDelay: 3000,
 
       onConnect: () => {
