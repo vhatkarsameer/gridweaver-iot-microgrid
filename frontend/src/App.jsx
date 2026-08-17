@@ -11,13 +11,13 @@ function App() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState("ALL");
 
-  //State to hold the live aggregated math from the backend enginer
+  // State to hold the live aggregated math from the backend engine
   const [gridSummary, setGridSummary] = useState(null);
 
   useEffect(() => {
     const client = new Client({
-      brokerURL: "ws://localhost:8080/ws-telemetry",
- 
+      brokerURL: "ws://localhost:8080/ws-grid",
+
       reconnectDelay: 3000,
 
       onConnect: () => {
@@ -53,12 +53,13 @@ function App() {
           });
         });
 
-        //The dashboard Cards data stream (From the backend engine we built)
         client.subscribe("/topic/grid-state", (message) => {
             if(!message.body) return;
+
+            console.log("BACKEND SUMMARY DATA:", message.body);
             const summary = JSON.parse(message.body);
             setGridSummary(summary);
-            });
+        });
       },
 
       onWebSocketClose: () => setConnected(false),
@@ -118,7 +119,7 @@ function App() {
       <header className="dashboard-header">
         <div>
           <h1>GridWeaver Microgrid Control Tower</h1>
-          <p className="subtitle">Real-time Mumbai Household Energy Matrix</p>
+          <p className="subtitle">Real-time Maharashtra Household Energy Matrix</p>
         </div>
 
         <div className={`status-badge ${connected ? "online" : "offline"}`}>
@@ -129,26 +130,26 @@ function App() {
       <div className="stats-grid">
           <div className="stat-card">
               <h3>Net Grid Balance</h3>
-              <p className="stat-value" style={{ color: gridSummary && gridSummary.netGridBalanceWatts >= 0 ? '#10b981' : '#ef4444' }}>
-                  {gridSummary ? `${gridSummary.netGridBalanceWatts} W` : 'Loading...'}
+              <p className="stat-value" style={{ color: gridSummary && gridSummary.netGridBalanceKw >= 0 ? '#10b981' : '#ef4444' }}>
+                  {gridSummary ? `${gridSummary.netGridBalanceKw.toFixed(1)} kW` : 'Loading...'}
               </p>
           </div>
           <div className="stat-card">
               <h3>Total Solar Generation</h3>
               <p className="stat-value watts">
-                  {gridSummary ? `${gridSummary.totalSolarGenerationWatts} W` : `${totalSolarWatts.toFixed(1)} W`}
+                  {gridSummary ? `${gridSummary.totalSolarGenerationKw.toFixed(1)} kW` : `${totalSolarWatts.toFixed(1)} W`}
               </p>
           </div>
           <div className="stat-card">
               <h3>Total Battery Demand</h3>
               <p className="stat-value battery">
-                  {gridSummary ? `${gridSummary.totalBatteryWatts} W` : `${totalBatteryWatts.toFixed(1)} W`}
+                  {gridSummary ? `${gridSummary.totalBatteryDemandKw.toFixed(1)} kW` : `${totalBatteryWatts.toFixed(1)} W`}
               </p>
               </div>
           <div className="stat-card">
               <h3>Avg Battery Level</h3>
               <p className="stat-value">
-                  {gridSummary ? `${gridSummary.averageBatteryLevelPct.toFixed(1)}%` : 'Loading...'}
+                  {gridSummary ? `${gridSummary.averageBatterySocPercentage.toFixed(1)}%` : 'Loading...'}
               </p>
           </div>
       </div>
@@ -172,7 +173,7 @@ function App() {
           }}
         >
           <div>
-            <h2 style={{ margin: 0 }}>Mumbai GIS Device Map</h2>
+            <h2 style={{ margin: 0 }}>Maharashtra GIS Device Map</h2>
             <p style={{ margin: "6px 0 0", color: "#64748b" }}>
               {liveTelemetry.length > 0
                 ? "Showing live telemetry from the backend"
@@ -226,7 +227,7 @@ function App() {
 
       <div className="feed-section">
         <h2>
-          Mumbai Microgrid Households
+          Maharashtra Microgrid Households
           <span className="count-badge">
             Showing {filteredHouseholds.length} of {households.length}
           </span>
@@ -273,7 +274,7 @@ function App() {
                           Charge: {house.battery.batteryLevelPct.toFixed(1)}%
                         </div>
                         <span
-                          className={`status-tag ${house.battery.status.toLowerCase()}`}
+                          className={`status-tag ${house.battery.status?.toLowerCase()}`}
                         >
                           {house.battery.status}
                         </span>

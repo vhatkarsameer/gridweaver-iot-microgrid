@@ -23,8 +23,6 @@ public class IotSimulatorService {
     private final GridStateEngine gridStateEngine;
     private final DeviceStateProcessor stateProcessor;
 
-    private final double baseLat = 19.0760; // Central Mumbai Latitude
-    private final double baseLng = 72.8777; // Central Mumbai Longitude
 
     // Holds 5,000 fixed household DTOs mapped on startup
     private final List<HouseholdLocation> households = new ArrayList<>();
@@ -36,18 +34,18 @@ public class IotSimulatorService {
     }
 
     /**
-     * Initializes 5,000 fixed Household locations across Mumbai upon application startup,
+     * Initializes 5,000 fixed Household locations across Maharashtra upon application startup,
      * then spawns 10,000 concurrent Virtual Threads (1 Solar + 1 Battery per Household).
      */
     @EventListener(ApplicationReadyEvent.class)
     public void start10000ConcurrentDeviceVirtualThreads() {
         Random random = new Random();
 
-        // 1. Generate 5,000 fixed household locations centered in Mumbai
+        // 1. Generate 5,000 fixed household locations centered in Maharashtra
         for (int i = 0; i < 5000; i++) {
-            String houseId = "HOUSE-MUM-" + (1000 + i);
-            double lat = baseLat + (random.nextDouble() - 0.5) * 0.1;
-            double lng = baseLng + (random.nextDouble() - 0.5) * 0.1;
+            String houseId = "HOUSE-MH-" + (1000 + i);
+            double lat = 17.0 + (21.0 - 17.0) * random.nextDouble();
+            double lng = 74.0 + (80.0 - 74.0) * random.nextDouble();
 
             // Instantiating the clean HouseholdLocation DTO record
             households.add(new HouseholdLocation(houseId, lat, lng));
