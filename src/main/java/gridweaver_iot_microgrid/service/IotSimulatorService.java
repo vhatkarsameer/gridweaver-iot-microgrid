@@ -21,6 +21,7 @@ public class IotSimulatorService {
 
     private final SimpMessagingTemplate messagingTemplate;
     private final GridStateEngine gridStateEngine;
+    private final DeviceStateProcessor stateProcessor;
 
     private final double baseLat = 19.0760; // Central Mumbai Latitude
     private final double baseLng = 72.8777; // Central Mumbai Longitude
@@ -28,9 +29,10 @@ public class IotSimulatorService {
     // Holds 5,000 fixed household DTOs mapped on startup
     private final List<HouseholdLocation> households = new ArrayList<>();
 
-    public IotSimulatorService(SimpMessagingTemplate messagingTemplate, GridStateEngine gridStateEngine) {
+    public IotSimulatorService(SimpMessagingTemplate messagingTemplate, GridStateEngine gridStateEngine, DeviceStateProcessor stateProcessor) {
         this.messagingTemplate = messagingTemplate;
         this.gridStateEngine = gridStateEngine;
+        this.stateProcessor = stateProcessor;
     }
 
     /**
@@ -101,10 +103,23 @@ public class IotSimulatorService {
                     );
                 }
 
+                DeviceStatus trueStatus = stateProcessor.processAndGetState(payload);
+
+                TelemetryPayload finalPayload = new TelemetryPayload(
+                        payload.deviceId(),
+                        payload.deviceType(),
+                        trueStatus,
+                        payload.outputWatts(),
+                        payload.batteryLevelPct(),
+                        payload.latitude(),
+                        payload.longitude(),
+                        payload.timestamp()
+                );
+
                 gridStateEngine.ingestTelemetry(payload);
 
                 // Broadcast payload to WebSocket topic
-                messagingTemplate.convertAndSend("/topic/telemetry", payload);
+                messagingTemplate.convertAndSend("/topic/telemetry", finalPayload);
 
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();

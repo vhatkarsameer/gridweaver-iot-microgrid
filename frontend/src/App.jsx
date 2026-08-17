@@ -11,6 +11,9 @@ function App() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState("ALL");
 
+  //State to hold the live aggregated math from the backend enginer
+  const [gridSummary, setGridSummary] = useState(null);
+
   useEffect(() => {
     const client = new Client({
       brokerURL: "ws://localhost:8080/ws-telemetry",
@@ -49,6 +52,13 @@ function App() {
             };
           });
         });
+
+        //The dashboard Cards data stream (From the backend engine we built)
+        client.subscribe("/topic/grid-state", (message) => {
+            if(!message.body) return;
+            const summary = JSON.parse(message.body);
+            setGridSummary(summary);
+            });
       },
 
       onWebSocketClose: () => setConnected(false),
@@ -117,18 +127,30 @@ function App() {
       </header>
 
       <div className="stats-grid">
-        <div className="stat-card">
-          <h3>Active Households Online</h3>
-          <p className="stat-value">{households.length}</p>
-        </div>
-        <div className="stat-card">
-          <h3>Total Solar Generation</h3>
-          <p className="stat-value watts">{totalSolarWatts.toFixed(1)} W</p>
-        </div>
-        <div className="stat-card">
-          <h3>Total Battery Throughput</h3>
-          <p className="stat-value battery">{totalBatteryWatts.toFixed(1)} W</p>
-        </div>
+          <div className="stat-card">
+              <h3>Net Grid Balance</h3>
+              <p className="stat-value" style={{ color: gridSummary && gridSummary.netGridBalanceWatts >= 0 ? '#10b981' : '#ef4444' }}>
+                  {gridSummary ? `${gridSummary.netGridBalanceWatts} W` : 'Loading...'}
+              </p>
+          </div>
+          <div className="stat-card">
+              <h3>Total Solar Generation</h3>
+              <p className="stat-value watts">
+                  {gridSummary ? `${gridSummary.totalSolarGenerationWatts} W` : `${totalSolarWatts.toFixed(1)} W`}
+              </p>
+          </div>
+          <div className="stat-card">
+              <h3>Total Battery Demand</h3>
+              <p className="stat-value battery">
+                  {gridSummary ? `${gridSummary.totalBatteryWatts} W` : `${totalBatteryWatts.toFixed(1)} W`}
+              </p>
+              </div>
+          <div className="stat-card">
+              <h3>Avg Battery Level</h3>
+              <p className="stat-value">
+                  {gridSummary ? `${gridSummary.averageBatteryLevelPct.toFixed(1)}%` : 'Loading...'}
+              </p>
+          </div>
       </div>
 
       <section
