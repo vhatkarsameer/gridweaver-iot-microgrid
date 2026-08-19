@@ -15,6 +15,11 @@ const VALID_STATUSES = new Set([
   'FAULT',
 ]);
 
+const MAHARASHTRA_CENTER = {
+  latitude: 19.7515,
+  longitude: 75.7139,
+};
+
 function getMockDevices() {
   const exportedDevices =
     mockTelemetryModule.initialMockDevices ??
@@ -44,7 +49,9 @@ function normalizeTelemetry(payload, previous = {}) {
   }
 
   const merged = { ...previous, ...payload };
-  const rawStatus = String(merged.status ?? merged.state ?? 'IDLE').toUpperCase();
+  const rawStatus = String(
+    merged.status ?? merged.state ?? 'IDLE',
+  ).toUpperCase();
   const status = VALID_STATUSES.has(rawStatus) ? rawStatus : 'IDLE';
 
   return {
@@ -57,8 +64,14 @@ function normalizeTelemetry(payload, previous = {}) {
       merged.batteryLevelPct,
       previous.batteryLevelPct ?? 0,
     ),
-    latitude: toNumber(merged.latitude, previous.latitude ?? 19.076),
-    longitude: toNumber(merged.longitude, previous.longitude ?? 72.8777),
+    latitude: toNumber(
+      merged.latitude,
+      previous.latitude ?? MAHARASHTRA_CENTER.latitude,
+    ),
+    longitude: toNumber(
+      merged.longitude,
+      previous.longitude ?? MAHARASHTRA_CENTER.longitude,
+    ),
     timestamp: merged.timestamp ?? new Date().toISOString(),
   };
 }
@@ -80,8 +93,12 @@ export default function App() {
   const [isConnected, setIsConnected] = useState(false);
   const [connectionError, setConnectionError] = useState('');
   const [lastMessageAt, setLastMessageAt] = useState(null);
+  const [isDark, setIsDark] = useState(false);
 
-  const devices = useMemo(() => Object.values(devicesById), [devicesById]);
+  const devices = useMemo(
+    () => Object.values(devicesById),
+    [devicesById],
+  );
 
   useEffect(() => {
     const brokerUrl =
@@ -90,6 +107,7 @@ export default function App() {
     const client = new Client({
       brokerURL: brokerUrl,
       reconnectDelay: 3000,
+
       onConnect: () => {
         setIsConnected(true);
         setConnectionError('');
@@ -104,7 +122,10 @@ export default function App() {
 
             setDevicesById((currentDevices) => {
               const previousDevice = currentDevices[payload.deviceId] ?? {};
-              const updatedDevice = normalizeTelemetry(payload, previousDevice);
+              const updatedDevice = normalizeTelemetry(
+                payload,
+                previousDevice,
+              );
 
               if (!updatedDevice) {
                 return currentDevices;
@@ -123,16 +144,20 @@ export default function App() {
           }
         });
       },
+
       onDisconnect: () => {
         setIsConnected(false);
       },
+
       onWebSocketClose: () => {
         setIsConnected(false);
       },
+
       onWebSocketError: () => {
         setIsConnected(false);
         setConnectionError('Unable to reach the telemetry WebSocket.');
       },
+
       onStompError: (frame) => {
         setIsConnected(false);
         setConnectionError(
@@ -152,37 +177,57 @@ export default function App() {
     ? lastMessageAt.toLocaleTimeString()
     : 'Waiting for telemetry';
 
+  function toggleDarkTheme() {
+    setIsDark((current) => !current);
+  }
+
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${isDark ? 'dark' : ''}`}>
       <header className="app-header">
         <div>
           <p className="eyebrow">GRIDWEAVER · WEEK 2</p>
-          <h1>Mumbai Microgrid GIS</h1>
+          <h1>Maharashtra Microgrid GIS</h1>
           <p className="app-subtitle">
-            Live device-state visualization from the telemetry stream
+            Live device-state visualization across Maharashtra
           </p>
         </div>
 
-        <div className="connection-panel" aria-live="polite">
-          <span
-            className={`connection-dot ${isConnected ? 'online' : 'offline'}`}
-            aria-hidden="true"
-          />
-          <div>
-            <strong>{isConnected ? 'Live stream connected' : 'Offline fallback'}</strong>
-            <span>{latestMessageLabel}</span>
+        <div className="app-header-actions">
+          <div className="connection-panel" aria-live="polite">
+            <span
+              className={`connection-dot ${
+                isConnected ? 'online' : 'offline'
+              }`}
+              aria-hidden="true"
+            />
+            <div>
+              <strong>
+                {isConnected ? 'Live stream connected' : 'Offline fallback'}
+              </strong>
+              <span>{latestMessageLabel}</span>
+            </div>
           </div>
+
+          <button
+            type="button"
+            className="theme-toggle"
+            onClick={toggleDarkTheme}
+            aria-label="Toggle dark theme"
+          >
+            {isDark ? 'Light mode' : 'Dark mode'}
+          </button>
         </div>
       </header>
 
       {connectionError && (
         <p className="connection-error" role="status">
-          {connectionError} Mock telemetry remains visible while the backend is unavailable.
+          {connectionError} Mock telemetry remains visible while the backend is
+          unavailable.
         </p>
       )}
 
       <main className="map-panel">
-        <GridMap devices={devices} />
+        <GridMap telemetry={devices} />
       </main>
     </div>
   );
