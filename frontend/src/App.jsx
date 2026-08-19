@@ -6,6 +6,21 @@ import GridMap from "./components/GridMap.jsx";
 import { mockTelemetry } from "./data/mockTelemetry.js";
 
 function App() {
+
+  const[isDarkMode, setIsDarkMode] = useState(() => {
+      const savedTheme = localStorage.getItem("app-theme");
+      return savedTheme === "dark";
+  });
+    useEffect(() => {
+        localStorage.setItem("app-thema", isDarkMode ? "dark" : "light");
+        if(isDarkMode) {
+            document.body.classList.add("dark-mode");
+        }
+        else {
+            document.body.classList.remove("dark-mode");
+            }
+        }, [isDarkMode]);
+
   const [householdMap, setHouseholdMap] = useState({});
   const [connected, setConnected] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -122,9 +137,18 @@ function App() {
           <p className="subtitle">Real-time Maharashtra Household Energy Matrix</p>
         </div>
 
-        <div className={`status-badge ${connected ? "online" : "offline"}`}>
-          {connected ? "● LIVE STREAM CONNECTED" : "○ DISCONNECTED"}
-        </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+                  <button
+                    className="theme-toggle-btn"
+                    onClick={() => setIsDarkMode(!isDarkMode)}
+                  >
+                    {isDarkMode ? "☀️ Light" : "🌙 Dark"}
+                  </button>
+
+                  <div className={`status-badge ${connected ? "online" : "offline"}`}>
+                    {connected ? "● LIVE STREAM CONNECTED" : "○ DISCONNECTED"}
+                  </div>
+                </div>
       </header>
 
       <div className="stats-grid">
@@ -158,9 +182,10 @@ function App() {
         style={{
           margin: "24px 0",
           padding: "16px",
-          background: "#ffffff",
-          border: "1px solid #e2e8f0",
+          background: isDarkMode ? "#1e293b" : "#ffffff",
+          border: `1px solid ${isDarkMode ? "#334155" : "#e2e8f0"}`,
           borderRadius: "12px",
+          transition: "background 0.3s ease, border 0.3s ease"
         }}
       >
         <div
