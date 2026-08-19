@@ -1,21 +1,41 @@
+import { useMemo } from "react";
 import { MapContainer, TileLayer } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 
 import DeviceMarker from "./DeviceMarker.jsx";
 import { mockTelemetry } from "../data/mockTelemetry.js";
 
-const MUMBAI_CENTER = [19.076, 72.8777];
+const MAHARASHTRA_CENTER = [19.7515, 75.7139];
+
+const MAHARASHTRA_BOUNDS = [
+  [15.5, 72.0],
+  [22.2, 81.5],
+];
 
 export default function GridMap({ telemetry, onDeviceSelect }) {
-  const devices = Array.isArray(telemetry) && telemetry.length > 0
-    ? telemetry
-    : mockTelemetry;
+  const devices =
+    Array.isArray(telemetry) && telemetry.length > 0
+      ? telemetry
+      : mockTelemetry;
 
-  const isUsingMock = !telemetry || telemetry.length === 0 || telemetry === mockTelemetry;
+  const isUsingMock = !Array.isArray(telemetry) || telemetry.length === 0;
+
+  // Prevent unnecessary rebuilding of the device list when unrelated UI state changes.
+  const deviceMarkers = useMemo(
+    () =>
+      devices.map((device) => (
+        <DeviceMarker
+          key={device.deviceId}
+          telemetry={device}
+          onSelect={onDeviceSelect}
+        />
+      )),
+    [devices, onDeviceSelect],
+  );
 
   return (
     <section
-      aria-label="Mumbai microgrid map"
+      aria-label="Maharashtra microgrid map"
       style={{
         position: "relative",
         width: "100%",
@@ -27,28 +47,29 @@ export default function GridMap({ telemetry, onDeviceSelect }) {
       }}
     >
       <MapContainer
-        center={MUMBAI_CENTER}
-        zoom={11}
-        minZoom={9}
+        center={MAHARASHTRA_CENTER}
+        zoom={7}
+        minZoom={5}
         maxZoom={18}
+        maxBounds={MAHARASHTRA_BOUNDS}
+        maxBoundsViscosity={0.25}
         scrollWheelZoom={true}
+        preferCanvas={true}
+        zoomAnimation={false}
+        markerZoomAnimation={false}
         style={{ width: "100%", height: "100%", minHeight: "540px" }}
       >
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          updateWhenZooming={false}
+          updateWhenIdle={true}
+          keepBuffer={1}
         />
 
-        {devices.map((device ) => (
-          <DeviceMarker
-            key={device.deviceId}
-            telemetry={device}
-            onSelect={onDeviceSelect}
-          />
-        ))}
+        {deviceMarkers}
       </MapContainer>
 
-      {/* Floating GIS Map Legend & Mode Indicator */}
       <div
         style={{
           position: "absolute",
@@ -77,7 +98,9 @@ export default function GridMap({ telemetry, onDeviceSelect }) {
             paddingBottom: "6px",
           }}
         >
-          <strong style={{ fontSize: "13px" }}>Mumbai Microgrid Legend</strong>
+          <strong style={{ fontSize: "13px" }}>
+            Maharashtra Microgrid Legend
+          </strong>
           <span
             style={{
               fontSize: "10px",
@@ -113,26 +136,31 @@ export default function GridMap({ telemetry, onDeviceSelect }) {
               Status Indicators
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px 8px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#06b6d4", display: "inline-block" }}></span>
-                <span>Charging</span>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#f59e0b", display: "inline-block" }}></span>
-                <span>Discharge</span>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#64748b", display: "inline-block" }}></span>
-                <span>Idle</span>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#ef4444", display: "inline-block" }}></span>
-                <span>Fault</span>
-              </div>
+              <LegendItem color="#06b6d4" label="Charging" />
+              <LegendItem color="#f59e0b" label="Discharging" />
+              <LegendItem color="#64748b" label="Idle" />
+              <LegendItem color="#ef4444" label="Fault" />
             </div>
           </div>
         </div>
       </div>
     </section>
+  );
+}
+
+function LegendItem({ color, label }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+      <span
+        style={{
+          width: "8px",
+          height: "8px",
+          borderRadius: "50%",
+          background: color,
+          display: "inline-block",
+        }}
+      />
+      <span>{label}</span>
+    </div>
   );
 }
