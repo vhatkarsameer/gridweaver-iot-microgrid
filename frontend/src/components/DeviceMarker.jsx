@@ -1,5 +1,4 @@
-import { useMemo } from "react";
-import { Marker, Popup } from "react-leaflet";
+import { CircleMarker, Popup } from "react-leaflet";
 import L from "leaflet";
 
 const statusColors = {
@@ -9,13 +8,6 @@ const statusColors = {
   FAULT: "#ef4444",
 };
 
-const deviceSymbols = {
-  SOLAR: "☀",
-  SOLAR_PANEL: "☀",
-  BATTERY: "▣",
-  GRID: "⚡",
-};
-
 const deviceLabels = {
   SOLAR: "Solar panel",
   SOLAR_PANEL: "Solar panel",
@@ -23,20 +15,19 @@ const deviceLabels = {
   GRID: "Grid node",
 };
 
+// Reuse one Canvas renderer for all devices.
+// This avoids creating one DOM element per marker.
+const canvasRenderer = L.canvas({ padding: 0.5 });
+
 function formatPower(outputWatts) {
   return `${(Number(outputWatts || 0) / 1000).toFixed(1)} kW`;
 }
 
 function formatTimestamp(timestamp) {
-  if (!timestamp) {
-    return "Unavailable";
-  }
+  if (!timestamp) return "Unavailable";
 
   const date = new Date(timestamp);
-
-  if (Number.isNaN(date.getTime())) {
-    return "Invalid timestamp";
-  }
+  if (Number.isNaN(date.getTime())) return "Invalid timestamp";
 
   return new Intl.DateTimeFormat("en-IN", {
     dateStyle: "medium",
@@ -46,52 +37,24 @@ function formatTimestamp(timestamp) {
 }
 
 export default function DeviceMarker({ telemetry, onSelect }) {
-  const color = statusColors[telemetry.status] || "#64748b";
-  const symbol = deviceSymbols[telemetry.deviceType] || "•";
+  const color = statusColors[telemetry.status] || statusColors.IDLE;
   const deviceLabel =
-    deviceLabels[telemetry.deviceType] || telemetry.deviceType;
-
-  const markerIcon = useMemo(
-    () =>
-      L.divIcon({
-        className: "gridweaver-device-marker",
-        html: `
-          <div
-            style="
-              width: 36px;
-              height: 36px;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              border-radius: 50%;
-              background: ${color};
-              border: 3px solid #ffffff;
-              color: #ffffff;
-              font-size: 17px;
-              font-weight: 700;
-              box-shadow: 0 0 0 5px ${color}33, 0 4px 12px rgba(15, 23, 42, 0.28);
-            "
-          >
-            ${symbol}
-          </div>
-        `,
-        iconSize: [36, 36],
-        iconAnchor: [18, 18],
-        popupAnchor: [0, -20],
-      }),
-    [color, symbol],
-  );
+    deviceLabels[telemetry.deviceType] || telemetry.deviceType || "Unknown";
 
   return (
-    <Marker
-      position={[telemetry.latitude, telemetry.longitude]}
-      icon={markerIcon}
+    <CircleMarker
+      center={[Number(telemetry.latitude), Number(telemetry.longitude)]}
+      radius={5}
+      renderer={canvasRenderer}
+      pathOptions={{
+        color,
+        weight: 1,
+        opacity: 0.9,
+        fillColor: color,
+        fillOpacity: 0.85,
+      }}
       eventHandlers={{
-        click: () => {
-          if (onSelect) {
-            onSelect(telemetry);
-          }
-        },
+        click: () => onSelect?.(telemetry),
       }}
     >
       <Popup>
@@ -136,18 +99,13 @@ export default function DeviceMarker({ telemetry, onSelect }) {
             </dd>
 
             <dt>Last updated</dt>
-            <dd
-              style={{
-                margin: 0,
-                textAlign: "right",
-                fontSize: "12px",
-              }}
-            >
+            <dd style={{ margin: 0, textAlign: "right", fontSize: "12px" }}>
               {formatTimestamp(telemetry.timestamp)}
             </dd>
           </dl>
         </div>
       </Popup>
-    </Marker>
+    </CircleMarker>
   );
 }
+
