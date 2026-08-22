@@ -4,6 +4,8 @@ import gridweaver_iot_microgrid.model.DeviceStatus;
 import gridweaver_iot_microgrid.model.DeviceType;
 import gridweaver_iot_microgrid.model.HouseholdLocation;
 import gridweaver_iot_microgrid.model.TelemetryPayload;
+import jakarta.annotation.PreDestroy;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -17,15 +19,18 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 @Service
+// Allow disabling the 10,000 thread simulator in test profiles if needed
+@ConditionalOnProperty(name = "iot.simulator.enabled", havingValue = "true", matchIfMissing = true)
 public class IotSimulatorService {
 
     private final SimpMessagingTemplate messagingTemplate;
     private final GridStateEngine gridStateEngine;
     private final DeviceStateProcessor stateProcessor;
 
-
-    // Holds 5,000 fixed household DTOs mapped on startup
     private final List<HouseholdLocation> households = new ArrayList<>();
+
+    // Maintain a reference to the executor so Spring can shut it down gracefully
+    private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
     public IotSimulatorService(SimpMessagingTemplate messagingTemplate, GridStateEngine gridStateEngine, DeviceStateProcessor stateProcessor) {
         this.messagingTemplate = messagingTemplate;
@@ -47,25 +52,20 @@ public class IotSimulatorService {
             double lat = 17.0 + (21.0 - 17.0) * random.nextDouble();
             double lng = 74.0 + (80.0 - 74.0) * random.nextDouble();
 
-            // Instantiating the clean HouseholdLocation DTO record
             households.add(new HouseholdLocation(houseId, lat, lng));
         }
 
-        // 2. Launch 10,000 Virtual Threads using Java 21 Project Loom
-        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+        // Do NOT put Executors.newVirtualThreadPerTaskExecutor() in a try-with-resources block!
+        // Submit tasks directly to allow the startup event thread to unblock.
+        for (HouseholdLocation house : households) {
+            String solarId = "SOLAR-" + house.houseId();
+            executor.submit(() -> runVirtualDeviceLoop(solarId, house, DeviceType.SOLAR_PANEL));
 
-            for (HouseholdLocation house : households) {
-                // Thread 1: Solar Panel Array for this household
-                String solarId = "SOLAR-" + house.houseId();
-                executor.submit(() -> runVirtualDeviceLoop(solarId, house, DeviceType.SOLAR_PANEL));
-
-                // Thread 2: Home Battery for this household
-                String batteryId = "BATT-" + house.houseId();
-                executor.submit(() -> runVirtualDeviceLoop(batteryId, house, DeviceType.BATTERY));
-            }
-
-            System.out.println("🚀 [JAVA 21 VIRTUAL THREADS] Successfully spawned 10,000 concurrent tasks across 5,000 fixed Households!");
+            String batteryId = "BATT-" + house.houseId();
+            executor.submit(() -> runVirtualDeviceLoop(batteryId, house, DeviceType.BATTERY));
         }
+
+        System.out.println("🚀 [JAVA 21 VIRTUAL THREADS] Successfully spawned 10,000 concurrent tasks across 5,000 fixed Households!");
     }
 
     private void runVirtualDeviceLoop(String deviceId, HouseholdLocation house, DeviceType deviceType) {
@@ -73,7 +73,6 @@ public class IotSimulatorService {
 
         while (!Thread.currentThread().isInterrupted()) {
             try {
-                // Stagger ping intervals per device (between 1 to 3 seconds)
                 Thread.sleep(5000 + random.nextInt(5000));
 
                 TelemetryPayload payload;
@@ -84,8 +83,8 @@ public class IotSimulatorService {
                             DeviceStatus.GENERATING,
                             random.nextDouble(80.0, 200.0),
                             0.0,
-                            house.latitude(),  // Using Java 21 record accessor getter
-                            house.longitude(), // Using Java 21 record accessor getter
+                            house.latitude(),
+                            house.longitude(),
                             Instant.now()
                     );
                 } else {
@@ -95,8 +94,8 @@ public class IotSimulatorService {
                             random.nextBoolean() ? DeviceStatus.CHARGING : DeviceStatus.DISCHARGING,
                             random.nextDouble(1500.0, 2500.0),
                             random.nextDouble(40.0, 90.0),
-                            house.latitude(),  // Using Java 21 record accessor getter
-                            house.longitude(), // Using Java 21 record accessor getter
+                            house.latitude(),
+                            house.longitude(),
                             Instant.now()
                     );
                 }
@@ -118,11 +117,18 @@ public class IotSimulatorService {
 
                 // Broadcast payload to WebSocket topic
                 messagingTemplate.convertAndSend("/topic/telemetry", finalPayload);
+                messagingTemplate.convertAndSend("/topic/telemetry", payload);
 
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 break;
             }
         }
+    }
+
+    // Gracefully shut down all 10,000 threads when Spring context closes or tests finish
+    @PreDestroy
+    public void stopSimulation() {
+        executor.shutdownNow();
     }
 }
