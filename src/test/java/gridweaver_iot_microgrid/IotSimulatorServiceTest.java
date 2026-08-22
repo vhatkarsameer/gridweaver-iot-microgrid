@@ -1,5 +1,7 @@
 package gridweaver_iot_microgrid;
 
+import gridweaver_iot_microgrid.service.DeviceStateProcessor;
+import gridweaver_iot_microgrid.service.GridStateEngine;
 import gridweaver_iot_microgrid.service.IotSimulatorService;
 import org.junit.jupiter.api.Test;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -11,13 +13,16 @@ class IotSimulatorServiceTest {
 
     @Test
     void shouldCreateIotSimulatorService() {
-        // Mock the existing WebSocket messaging dependency
-        SimpMessagingTemplate messagingTemplate =
-                mock(SimpMessagingTemplate.class);
+        // 1. Mock the WebSocket messaging dependency
+        SimpMessagingTemplate messagingTemplate = mock(SimpMessagingTemplate.class);
 
-        // Create the simulator service using its existing constructor
+        // 2. Mock your new Week 2 State Engine dependencies
+        GridStateEngine gridStateEngine = mock(GridStateEngine.class);
+        DeviceStateProcessor stateProcessor = mock(DeviceStateProcessor.class);
+
+        // 3. Create the simulator service using the updated constructor
         IotSimulatorService service =
-                new IotSimulatorService(messagingTemplate);
+                new IotSimulatorService(messagingTemplate, gridStateEngine, stateProcessor);
 
         // Verify that the service is created successfully
         assertNotNull(service);

@@ -24,26 +24,33 @@ import java.util.concurrent.Executors;
 public class IotSimulatorService {
 
     private final SimpMessagingTemplate messagingTemplate;
-    private final double baseLat = 19.0760;
-    private final double baseLng = 72.8777;
+    private final GridStateEngine gridStateEngine;
+    private final DeviceStateProcessor stateProcessor;
 
     private final List<HouseholdLocation> households = new ArrayList<>();
 
     // Maintain a reference to the executor so Spring can shut it down gracefully
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
-    public IotSimulatorService(SimpMessagingTemplate messagingTemplate) {
+    public IotSimulatorService(SimpMessagingTemplate messagingTemplate, GridStateEngine gridStateEngine, DeviceStateProcessor stateProcessor) {
         this.messagingTemplate = messagingTemplate;
+        this.gridStateEngine = gridStateEngine;
+        this.stateProcessor = stateProcessor;
     }
 
+    /**
+     * Initializes 5,000 fixed Household locations across Maharashtra upon application startup,
+     * then spawns 10,000 concurrent Virtual Threads (1 Solar + 1 Battery per Household).
+     */
     @EventListener(ApplicationReadyEvent.class)
     public void start10000ConcurrentDeviceVirtualThreads() {
         Random random = new Random();
 
+        // 1. Generate 5,000 fixed household locations centered in Maharashtra
         for (int i = 0; i < 5000; i++) {
-            String houseId = "HOUSE-MUM-" + (1000 + i);
-            double lat = baseLat + (random.nextDouble() - 0.5) * 0.1;
-            double lng = baseLng + (random.nextDouble() - 0.5) * 0.1;
+            String houseId = "HOUSE-MH-" + (1000 + i);
+            double lat = 17.0 + (21.0 - 17.0) * random.nextDouble();
+            double lng = 74.0 + (80.0 - 74.0) * random.nextDouble();
 
             households.add(new HouseholdLocation(houseId, lat, lng));
         }
@@ -93,6 +100,23 @@ public class IotSimulatorService {
                     );
                 }
 
+                DeviceStatus trueStatus = stateProcessor.processAndGetState(payload);
+
+                TelemetryPayload finalPayload = new TelemetryPayload(
+                        payload.deviceId(),
+                        payload.deviceType(),
+                        trueStatus,
+                        payload.outputWatts(),
+                        payload.batteryLevelPct(),
+                        payload.latitude(),
+                        payload.longitude(),
+                        payload.timestamp()
+                );
+
+                gridStateEngine.ingestTelemetry(payload);
+
+                // Broadcast payload to WebSocket topic
+                messagingTemplate.convertAndSend("/topic/telemetry", finalPayload);
                 messagingTemplate.convertAndSend("/topic/telemetry", payload);
 
             } catch (InterruptedException e) {
