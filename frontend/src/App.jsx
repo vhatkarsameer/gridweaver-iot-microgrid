@@ -5,49 +5,72 @@ import "./App.css";
 import GridMap from "./components/GridMap.jsx";
 import { mockTelemetry } from "./data/mockTelemetry.js";
 
+const BROKER_URL = "ws://localhost:8080/ws-grid";
+const TELEMETRY_TOPIC = "/topic/telemetry";
+const THEME_STORAGE_KEY = "gridweaver-theme";
+
 function App() {
   const [householdMap, setHouseholdMap] = useState({});
   const [connected, setConnected] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState("ALL");
+  const [isDark, setIsDark] = useState(() => {
+    return localStorage.getItem(THEME_STORAGE_KEY) === "dark";
+  });
+
+  useEffect(() => {
+    localStorage.setItem(THEME_STORAGE_KEY, isDark ? "dark" : "light");
+  }, [isDark]);
 
   useEffect(() => {
     const client = new Client({
-      brokerURL: "ws://localhost:8080/ws-telemetry",
- 
+      brokerURL: BROKER_URL,
       reconnectDelay: 3000,
 
       onConnect: () => {
         setConnected(true);
 
-        client.subscribe("/topic/telemetry", (message) => {
+        client.subscribe(TELEMETRY_TOPIC, (message) => {
           if (!message.body) return;
 
-          const payload = JSON.parse(message.body);
-          const houseId = payload.deviceId
-            .replace("SOLAR-", "")
-            .replace("BATT-", "");
+          try {
+            const payload = JSON.parse(message.body);
+            const deviceId = String(payload.deviceId || "");
+            const houseId = deviceId
+              .replace("SOLAR-", "")
+              .replace("BATT-", "");
 
-          setHouseholdMap((previousMap) => {
-            const currentHouse = previousMap[houseId] || {
-              houseId,
-              latitude: payload.latitude,
-              longitude: payload.longitude,
-              solar: null,
-              battery: null,
-            };
+            if (!houseId) return;
 
-            if (payload.deviceType === "SOLAR_PANEL") {
-              currentHouse.solar = payload;
-            } else if (payload.deviceType === "BATTERY") {
-              currentHouse.battery = payload;
-            }
+            setHouseholdMap((previousMap) => {
+              const currentHouse = previousMap[houseId] || {
+                houseId,
+                latitude: Number(payload.latitude) || 19.7515,
+                longitude: Number(payload.longitude) || 75.7139,
+                solar: null,
+                battery: null,
+              };
 
-            return {
-              ...previousMap,
-              [houseId]: { ...currentHouse },
-            };
-          });
+              const updatedHouse = {
+                ...currentHouse,
+                latitude: Number(payload.latitude) || currentHouse.latitude,
+                longitude: Number(payload.longitude) || currentHouse.longitude,
+              };
+
+              if (payload.deviceType === "SOLAR_PANEL") {
+                updatedHouse.solar = payload;
+              } else if (payload.deviceType === "BATTERY") {
+                updatedHouse.battery = payload;
+              }
+
+              return {
+                ...previousMap,
+                [houseId]: updatedHouse,
+              };
+            });
+          } catch (error) {
+            console.error("Unable to parse telemetry message:", error);
+          }
         });
       },
 
@@ -66,14 +89,25 @@ function App() {
   const households = Object.values(householdMap);
 
   const totalSolarWatts = households.reduce(
-    (sum, house) => sum + (house.solar ? house.solar.outputWatts : 0),
+    (sum, house) => sum + Number(house.solar?.outputWatts || 0),
     0,
   );
 
   const totalBatteryWatts = households.reduce(
-    (sum, house) => sum + (house.battery ? house.battery.outputWatts : 0),
+    (sum, house) => sum + Number(house.battery?.outputWatts || 0),
     0,
   );
+
+  const batteryReadings = households
+    .map((house) => house.battery?.batteryLevelPct)
+    .filter((value) => Number.isFinite(Number(value)));
+
+  const averageBatteryLevel = batteryReadings.length
+    ? batteryReadings.reduce((sum, value) => sum + Number(value), 0) /
+      batteryReadings.length
+    : 0;
+
+  const netGridBalance = totalSolarWatts - totalBatteryWatts;
 
   const liveTelemetry = households.flatMap((house) =>
     [house.solar, house.battery].filter(Boolean),
@@ -104,62 +138,59 @@ function App() {
   });
 
   return (
-    <div className="dashboard-container">
+    <div className={`dashboard-container ${isDark ? "dark" : ""}`}>
       <header className="dashboard-header">
         <div>
           <h1>GridWeaver Microgrid Control Tower</h1>
-          <p className="subtitle">Real-time Mumbai Household Energy Matrix</p>
+          <p className="subtitle">
+            Real-time Maharashtra Household Energy Matrix
+          </p>
         </div>
 
-        <div className={`status-badge ${connected ? "online" : "offline"}`}>
-          {connected ? "● LIVE STREAM CONNECTED" : "○ DISCONNECTED"}
+        <div className="header-actions">
+          <div className={`status-badge ${connected ? "online" : "offline"}`}>
+            {connected ? "● LIVE STREAM CONNECTED" : "○ DISCONNECTED"}
+          </div>
+
+          <button
+            type="button"
+            className="theme-toggle"
+            onClick={() => setIsDark((current) => !current)}
+            aria-label="Toggle dark theme"
+          >
+            {isDark ? "Light mode" : "Dark mode"}
+          </button>
         </div>
       </header>
 
       <div className="stats-grid">
         <div className="stat-card">
-          <h3>Active Households Online</h3>
-          <p className="stat-value">{households.length}</p>
+          <h3>Net Grid Balance</h3>
+          <p className="stat-value">{netGridBalance.toFixed(1)} W</p>
         </div>
         <div className="stat-card">
           <h3>Total Solar Generation</h3>
           <p className="stat-value watts">{totalSolarWatts.toFixed(1)} W</p>
         </div>
         <div className="stat-card">
-          <h3>Total Battery Throughput</h3>
-          <p className="stat-value battery">{totalBatteryWatts.toFixed(1)} W</p>
+          <h3>Avg Battery Level</h3>
+          <p className="stat-value battery">
+            {averageBatteryLevel.toFixed(1)}%
+          </p>
         </div>
       </div>
 
-      <section
-        style={{
-          margin: "24px 0",
-          padding: "16px",
-          background: "#ffffff",
-          border: "1px solid #e2e8f0",
-          borderRadius: "12px",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            gap: "16px",
-            marginBottom: "14px",
-          }}
-        >
+      <section className="map-section">
+        <div className="map-section-header">
           <div>
-            <h2 style={{ margin: 0 }}>Mumbai GIS Device Map</h2>
-            <p style={{ margin: "6px 0 0", color: "#64748b" }}>
+            <h2>Maharashtra GIS Device Map</h2>
+            <p>
               {liveTelemetry.length > 0
                 ? "Showing live telemetry from the backend"
                 : "Showing static Week 1 preview data"}
             </p>
           </div>
-          <strong style={{ color: connected ? "#10b981" : "#64748b" }}>
-            {mapTelemetry.length} devices
-          </strong>
+          <strong>{mapTelemetry.length} devices</strong>
         </div>
 
         <GridMap telemetry={mapTelemetry} />
@@ -174,37 +205,37 @@ function App() {
             onChange={(event) => setSearchTerm(event.target.value)}
           />
           {searchTerm && (
-            <button className="clear-btn" onClick={() => setSearchTerm("")}>
+            <button
+              type="button"
+              className="clear-btn"
+              onClick={() => setSearchTerm("")}
+            >
               ✕
             </button>
           )}
         </div>
 
         <div className="filter-group">
-          <button
-            className={`filter-btn ${filterType === "ALL" ? "active" : ""}`}
-            onClick={() => setFilterType("ALL")}
-          >
-            All Households
-          </button>
-          <button
-            className={`filter-btn ${filterType === "SOLAR" ? "active" : ""}`}
-            onClick={() => setFilterType("SOLAR")}
-          >
-            Solar Active
-          </button>
-          <button
-            className={`filter-btn ${filterType === "BATTERY" ? "active" : ""}`}
-            onClick={() => setFilterType("BATTERY")}
-          >
-            Battery Active
-          </button>
+          {[
+            ["ALL", "All Households"],
+            ["SOLAR", "Solar Active"],
+            ["BATTERY", "Battery Active"],
+          ].map(([value, label]) => (
+            <button
+              type="button"
+              key={value}
+              className={`filter-btn ${filterType === value ? "active" : ""}`}
+              onClick={() => setFilterType(value)}
+            >
+              {label}
+            </button>
+          ))}
         </div>
       </div>
 
       <div className="feed-section">
         <h2>
-          Mumbai Microgrid Households
+          Maharashtra Microgrid Households
           <span className="count-badge">
             Showing {filteredHouseholds.length} of {households.length}
           </span>
@@ -216,7 +247,7 @@ function App() {
               <div className="house-card-header">
                 <span className="house-id">{house.houseId}</span>
                 <span className="gps-tag">
-                  {house.latitude.toFixed(4)}, {house.longitude.toFixed(4)}
+                  {Number(house.latitude).toFixed(4)}, {Number(house.longitude).toFixed(4)}
                 </span>
               </div>
 
@@ -227,11 +258,9 @@ function App() {
                     {house.solar ? (
                       <>
                         <div className="device-value">
-                          {house.solar.outputWatts.toFixed(1)} W
+                          {Number(house.solar.outputWatts || 0).toFixed(1)} W
                         </div>
-                        <span className="status-tag generating">
-                          GENERATING
-                        </span>
+                        <span className="status-tag generating">GENERATING</span>
                       </>
                     ) : (
                       <div className="device-value offline">Connecting...</div>
@@ -245,15 +274,13 @@ function App() {
                     {house.battery ? (
                       <>
                         <div className="device-value">
-                          {house.battery.outputWatts.toFixed(1)} W
+                          {Number(house.battery.outputWatts || 0).toFixed(1)} W
                         </div>
                         <div className="battery-level">
-                          Charge: {house.battery.batteryLevelPct.toFixed(1)}%
+                          Charge: {Number(house.battery.batteryLevelPct || 0).toFixed(1)}%
                         </div>
-                        <span
-                          className={`status-tag ${house.battery.status.toLowerCase()}`}
-                        >
-                          {house.battery.status}
+                        <span className={`status-tag ${String(house.battery.status || "IDLE").toLowerCase()}`}>
+                          {house.battery.status || "IDLE"}
                         </span>
                       </>
                     ) : (
