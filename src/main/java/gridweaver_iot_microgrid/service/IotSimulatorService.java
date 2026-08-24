@@ -24,7 +24,7 @@ import java.util.concurrent.Executors;
 public class IotSimulatorService {
 
     private final SimpMessagingTemplate messagingTemplate;
-    private final GridStateEngine gridStateEngine;
+    private final TelemetryKafkaProducer kafkaProducer;
     private final DeviceStateProcessor stateProcessor;
 
     private final List<HouseholdLocation> households = new ArrayList<>();
@@ -32,9 +32,9 @@ public class IotSimulatorService {
     // Maintain a reference to the executor so Spring can shut it down gracefully
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
-    public IotSimulatorService(SimpMessagingTemplate messagingTemplate, GridStateEngine gridStateEngine, DeviceStateProcessor stateProcessor) {
+    public IotSimulatorService(SimpMessagingTemplate messagingTemplate, TelemetryKafkaProducer kafkaProducer, DeviceStateProcessor stateProcessor) {
         this.messagingTemplate = messagingTemplate;
-        this.gridStateEngine = gridStateEngine;
+        this.kafkaProducer = kafkaProducer;
         this.stateProcessor = stateProcessor;
     }
 
@@ -113,11 +113,7 @@ public class IotSimulatorService {
                         payload.timestamp()
                 );
 
-                gridStateEngine.ingestTelemetry(payload);
-
-                // Broadcast payload to WebSocket topic
-                messagingTemplate.convertAndSend("/topic/telemetry", finalPayload);
-                messagingTemplate.convertAndSend("/topic/telemetry", payload);
+                kafkaProducer.publishTelemetry(payload);
 
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
