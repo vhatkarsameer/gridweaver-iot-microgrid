@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Client } from '@stomp/stompjs';
 import GridMap from './components/GridMap.jsx';
 import * as mockTelemetryModule from './data/mockTelemetry.js';
@@ -7,6 +7,7 @@ import './App.css';
 const DEFAULT_BROKER_URL = 'ws://localhost:8080/ws-grid';
 const TELEMETRY_TOPIC = '/topic/telemetry';
 const THEME_STORAGE_KEY = 'app-theme';
+const UI_UPDATE_INTERVAL = 1000;
 
 const VALID_STATUSES = new Set([
   'CHARGING',
@@ -90,13 +91,18 @@ function createInitialDeviceMap() {
 }
 
 export default function App() {
-  const [devicesById, setDevicesById] = useState(createInitialDeviceMap);
+  const [devicesById, setDevicesById] = useState(() => createInitialDeviceMap());
   const [isConnected, setIsConnected] = useState(false);
   const [connectionError, setConnectionError] = useState('');
   const [lastMessageAt, setLastMessageAt] = useState(null);
   const [isDark, setIsDark] = useState(() => {
     return localStorage.getItem(THEME_STORAGE_KEY) === 'dark';
   });
+
+  const devicesByIdRef = useRef(devicesById);
+  const pendingDevicesRef = useRef(null);
+  const pendingMessageAtRef = useRef(null);
+  const updateTimerRef = useRef(null);
 
   const devices = useMemo(
     () => Object.values(devicesById),
@@ -114,6 +120,31 @@ export default function App() {
     const brokerUrl =
       import.meta.env.VITE_TELEMETRY_WS_URL || DEFAULT_BROKER_URL;
 
+    const flushTelemetryUpdates = () => {
+      if (pendingDevicesRef.current) {
+        setDevicesById(pendingDevicesRef.current);
+        pendingDevicesRef.current = null;
+      }
+
+      if (pendingMessageAtRef.current) {
+        setLastMessageAt(pendingMessageAtRef.current);
+        pendingMessageAtRef.current = null;
+      }
+
+      updateTimerRef.current = null;
+    };
+
+    const scheduleTelemetryUpdate = () => {
+      if (updateTimerRef.current !== null) {
+        return;
+      }
+
+      updateTimerRef.current = window.setTimeout(
+        flushTelemetryUpdates,
+        UI_UPDATE_INTERVAL,
+      );
+    };
+
     const client = new Client({
       brokerURL: brokerUrl,
       reconnectDelay: 3000,
@@ -129,25 +160,28 @@ export default function App() {
 
           try {
             const payload = JSON.parse(message.body);
+            const currentDevices = devicesByIdRef.current;
+            const previousDevice = currentDevices[payload.deviceId] ?? {};
+            const updatedDevice = normalizeTelemetry(
+              payload,
+              previousDevice,
+            );
 
-            setDevicesById((currentDevices) => {
-              const previousDevice = currentDevices[payload.deviceId] ?? {};
-              const updatedDevice = normalizeTelemetry(
-                payload,
-                previousDevice,
-              );
+            if (!updatedDevice) {
+              return;
+            }
 
-              if (!updatedDevice) {
-                return currentDevices;
-              }
+            const nextDevices = {
+              ...currentDevices,
+              [updatedDevice.deviceId]: updatedDevice,
+            };
 
-              return {
-                ...currentDevices,
-                [updatedDevice.deviceId]: updatedDevice,
-              };
-            });
-
-            setLastMessageAt(new Date());
+            // Keep the latest data in a ref immediately, but update React only
+            // once per second so the whole map does not re-render per message.
+            devicesByIdRef.current = nextDevices;
+            pendingDevicesRef.current = nextDevices;
+            pendingMessageAtRef.current = new Date();
+            scheduleTelemetryUpdate();
           } catch (error) {
             console.error('Unable to parse telemetry message:', error);
             setConnectionError('Received an invalid telemetry message.');
@@ -179,6 +213,12 @@ export default function App() {
     client.activate();
 
     return () => {
+      if (updateTimerRef.current !== null) {
+        window.clearTimeout(updateTimerRef.current);
+        updateTimerRef.current = null;
+      }
+
+      flushTelemetryUpdates();
       client.deactivate();
     };
   }, []);
