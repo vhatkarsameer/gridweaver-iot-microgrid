@@ -1,186 +1,125 @@
-import { useMemo } from 'react';
 import { Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 
-const STATUS_STYLES = {
-  GENERATING: {
-    color: '#059669',
-    symbol: '↥',
-    label: 'Generating',
-  },
-  CHARGING: {
-    color: '#10b981',
-    symbol: '+',
-    label: 'Charging',
-  },
-  DISCHARGING: {
-    color: '#d97706',
-    symbol: '↧',
-    label: 'Discharging',
-  },
-  IDLE: {
-    color: '#64748b',
-    symbol: '–',
-    label: 'Idle',
-  },
-  FAULT: {
-    color: '#dc2626',
-    symbol: '!',
-    label: 'Fault',
-  },
-};
+const deviceIcon = L.divIcon({
+  className: 'grid-device-marker',
+  html: '<span></span>',
+  iconSize: [18, 18],
+  iconAnchor: [9, 9],
+  popupAnchor: [0, -10],
+});
 
-function escapeHtml(value) {
-  return String(value ?? '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#039;');
+function firstDefined(...values) {
+  return values.find(
+    (value) => value !== undefined && value !== null && value !== '',
+  );
 }
 
-function formatNumber(value, digits = 1) {
-  const number = Number(value);
-  return Number.isFinite(number) ? number.toFixed(digits) : '0.0';
-}
-
-function formatTimestamp(timestamp) {
-  if (!timestamp) {
-    return 'Not available';
-  }
-
-  const parsedDate = new Date(timestamp);
-
-  if (Number.isNaN(parsedDate.getTime())) {
-    return 'Invalid timestamp';
-  }
-
-  return parsedDate.toLocaleString();
-}
-
-function createMarkerIcon(status) {
-  const style = STATUS_STYLES[status] ?? {
-    color: '#3b82f6',
-    symbol: '?',
-    label: 'Unknown',
-  };
-
-  return L.divIcon({
-    className: 'gridweaver-device-marker',
-    html: `
-      <div
-        title="${escapeHtml(style.label)}"
-        style="
-          width: 30px;
-          height: 30px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          border: 3px solid #ffffff;
-          border-radius: 50%;
-          background: ${style.color};
-          color: #ffffff;
-          box-shadow: 0 3px 10px rgba(15, 23, 42, 0.35);
-          font-family: system-ui, sans-serif;
-          font-size: 17px;
-          font-weight: 800;
-          line-height: 1;
-        "
-      >
-        ${escapeHtml(style.symbol)}
-      </div>
-    `,
-    iconSize: [30, 30],
-    iconAnchor: [15, 15],
-    popupAnchor: [0, -17],
-  });
+function displayValue(value, suffix = '') {
+  return `${firstDefined(value, 'N/A')}${suffix}`;
 }
 
 export default function DeviceMarker({ device }) {
-  const normalizedStatus = String(device?.status ?? 'IDLE').toUpperCase();
-  const markerIcon = useMemo(
-    () => createMarkerIcon(normalizedStatus),
-    [normalizedStatus],
+  if (!device || typeof device !== 'object') {
+    return null;
+  }
+
+  const latitude = Number(
+    firstDefined(
+      device.latitude,
+      device.lat,
+      device.location?.latitude,
+      device.location?.lat,
+    ),
+  );
+  const longitude = Number(
+    firstDefined(
+      device.longitude,
+      device.lng,
+      device.lon,
+      device.location?.longitude,
+      device.location?.lng,
+      device.location?.lon,
+    ),
   );
 
-  if (!device) {
+  // Ignore incomplete records instead of allowing Leaflet to crash.
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
     return null;
   }
 
-  const {
-    deviceId,
-    deviceType,
-    status = 'IDLE',
-    outputWatts = 0,
-    batteryLevelPct = 0,
-    latitude,
-    longitude,
-    timestamp,
-  } = device;
+  const telemetry =
+    device.telemetry && typeof device.telemetry === 'object'
+      ? device.telemetry
+      : {};
 
-  const statusStyle = STATUS_STYLES[normalizedStatus] ?? {
-    color: '#3b82f6',
-    symbol: '?',
-    label: 'Unknown',
-  };
-
-  const safeLatitude = Number(latitude);
-  const safeLongitude = Number(longitude);
-
-  if (!Number.isFinite(safeLatitude) || !Number.isFinite(safeLongitude)) {
-    return null;
-  }
+  const deviceId = firstDefined(
+    device.deviceId,
+    device.id,
+    device.name,
+    'Unknown device',
+  );
+  const status = firstDefined(device.status, telemetry.status, 'UNKNOWN');
+  const solar = firstDefined(
+    device.solarGeneration,
+    device.solarGen,
+    device.solarPower,
+    telemetry.solarGeneration,
+    telemetry.solarGen,
+    telemetry.solarPower,
+  );
+  const battery = firstDefined(
+    device.batteryLevel,
+    device.battery,
+    telemetry.batteryLevel,
+    telemetry.battery,
+  );
+  const gridBalance = firstDefined(
+    device.netGridBalance,
+    device.gridBalance,
+    telemetry.netGridBalance,
+    telemetry.gridBalance,
+  );
+  const power = firstDefined(
+    device.power,
+    device.powerOutput,
+    telemetry.power,
+    telemetry.powerOutput,
+  );
+  const updatedAt = firstDefined(
+    device.updatedAt,
+    telemetry.updatedAt,
+    device.timestamp,
+    telemetry.timestamp,
+  );
 
   return (
-    <Marker
-      position={[safeLatitude, safeLongitude]}
-      icon={markerIcon}
-      title={`${deviceId ?? 'Unknown device'} - ${statusStyle.label}`}
-    >
+    <Marker position={[latitude, longitude]} icon={deviceIcon}>
       <Popup>
-        <section className="device-popup" aria-label={`Details for ${deviceId}`}>
-          <div className="device-popup-header">
-            <div>
-              <h3>{deviceId ?? 'Unknown device'}</h3>
-              <p>{deviceType ?? 'Unknown device type'}</p>
-            </div>
-            <span
-              className="device-status-badge"
-              style={{
-                backgroundColor: `${statusStyle.color}20`,
-                color: statusStyle.color,
-                borderColor: `${statusStyle.color}55`,
-              }}
-            >
-              {statusStyle.label}
-            </span>
-          </div>
-
-          <div className="device-popup-divider" />
-
-          <dl className="device-metrics">
-            <div>
-              <dt>Output</dt>
-              <dd>{formatNumber(outputWatts)} W</dd>
-            </div>
-            <div>
-              <dt>Battery</dt>
-              <dd>{formatNumber(batteryLevelPct)}%</dd>
-            </div>
-            <div>
-              <dt>Coordinates</dt>
-              <dd>
-                {safeLatitude.toFixed(4)}, {safeLongitude.toFixed(4)}
-              </dd>
-            </div>
-          </dl>
-
-          <p className="device-last-updated">
-            Last updated: {formatTimestamp(timestamp)}
+        <div className="device-popup">
+          <h3>{deviceId}</h3>
+          <p>
+            <strong>Status:</strong> {status}
           </p>
-        </section>
+          <p>
+            <strong>Solar generation:</strong> {displayValue(solar, ' kW')}
+          </p>
+          <p>
+            <strong>Battery level:</strong> {displayValue(battery, '%')}
+          </p>
+          <p>
+            <strong>Grid balance:</strong> {displayValue(gridBalance, ' kW')}
+          </p>
+          <p>
+            <strong>Power:</strong> {displayValue(power, ' kW')}
+          </p>
+          {updatedAt && (
+            <p>
+              <strong>Updated:</strong> {updatedAt}
+            </p>
+          )}
+        </div>
       </Popup>
     </Marker>
   );
 }
-
