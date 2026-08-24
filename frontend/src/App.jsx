@@ -4,8 +4,9 @@ import GridMap from './components/GridMap.jsx';
 import * as mockTelemetryModule from './data/mockTelemetry.js';
 import './App.css';
 
-const DEFAULT_BROKER_URL = 'ws://localhost:8080/ws-telemetry';
+const DEFAULT_BROKER_URL = 'ws://localhost:8080/ws-grid';
 const TELEMETRY_TOPIC = '/topic/telemetry';
+const THEME_STORAGE_KEY = 'app-theme';
 
 const VALID_STATUSES = new Set([
   'CHARGING',
@@ -93,12 +94,21 @@ export default function App() {
   const [isConnected, setIsConnected] = useState(false);
   const [connectionError, setConnectionError] = useState('');
   const [lastMessageAt, setLastMessageAt] = useState(null);
-  const [isDark, setIsDark] = useState(false);
+  const [isDark, setIsDark] = useState(() => {
+    return localStorage.getItem(THEME_STORAGE_KEY) === 'dark';
+  });
 
   const devices = useMemo(
     () => Object.values(devicesById),
     [devicesById],
   );
+
+  useEffect(() => {
+    localStorage.setItem(
+      THEME_STORAGE_KEY,
+      isDark ? 'dark' : 'light',
+    );
+  }, [isDark]);
 
   useEffect(() => {
     const brokerUrl =
@@ -173,6 +183,38 @@ export default function App() {
     };
   }, []);
 
+  const totalSolarGeneration = devices
+    .filter((device) => device.deviceType === 'SOLAR_PANEL')
+    .reduce(
+      (total, device) => total + Number(device.outputWatts || 0),
+      0,
+    );
+
+  const batteryDevices = devices.filter(
+    (device) => device.deviceType === 'BATTERY',
+  );
+
+  const averageBatteryLevel = batteryDevices.length
+    ? batteryDevices.reduce(
+        (total, device) => total + Number(device.batteryLevelPct || 0),
+        0,
+      ) / batteryDevices.length
+    : 0;
+
+  const netGridBalance = devices.reduce((total, device) => {
+    const output = Number(device.outputWatts || 0);
+
+    if (device.deviceType === 'SOLAR_PANEL') {
+      return total + output;
+    }
+
+    if (device.deviceType === 'BATTERY') {
+      return total - output;
+    }
+
+    return total;
+  }, 0);
+
   const latestMessageLabel = lastMessageAt
     ? lastMessageAt.toLocaleTimeString()
     : 'Waiting for telemetry';
@@ -218,6 +260,27 @@ export default function App() {
           </button>
         </div>
       </header>
+
+      <div className="stats-grid">
+        <div className="stat-card">
+          <h3>Net Grid Balance</h3>
+          <p className="stat-value">{netGridBalance.toFixed(1)} W</p>
+        </div>
+
+        <div className="stat-card">
+          <h3>Total Solar Generation</h3>
+          <p className="stat-value watts">
+            {totalSolarGeneration.toFixed(1)} W
+          </p>
+        </div>
+
+        <div className="stat-card">
+          <h3>Avg Battery Level</h3>
+          <p className="stat-value battery">
+            {averageBatteryLevel.toFixed(1)}%
+          </p>
+        </div>
+      </div>
 
       {connectionError && (
         <p className="connection-error" role="status">
