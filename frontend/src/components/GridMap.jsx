@@ -67,9 +67,10 @@ export default function GridMap({ devices = [], telemetry = [] }) {
           >
             {safeDevices.map((device) => (
               <DeviceMarker
-                key={device.deviceId}
-                device={device}
-              />
+               key={device.deviceId}
+              telemetry={device}
+          />
+
             ))}
           </MarkerClusterGroup>
         </MapContainer>
