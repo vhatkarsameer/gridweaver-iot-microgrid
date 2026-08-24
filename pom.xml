@@ -54,6 +54,8 @@
 					<compilerArgs>
 						<arg>-proc:full</arg>
 					</compilerArgs>
+					<source>21</source>
+					<target>21</target>
 				</configuration>
 			</plugin>
 			<plugin>

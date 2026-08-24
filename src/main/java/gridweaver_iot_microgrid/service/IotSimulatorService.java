@@ -117,7 +117,6 @@ public class IotSimulatorService {
 
                 // Broadcast payload to WebSocket topic
                 messagingTemplate.convertAndSend("/topic/telemetry", finalPayload);
-                messagingTemplate.convertAndSend("/topic/telemetry", payload);
 
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
