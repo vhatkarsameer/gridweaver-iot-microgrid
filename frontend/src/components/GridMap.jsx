@@ -1,4 +1,5 @@
 import { MapContainer, TileLayer } from "react-leaflet";
+import MarkerClusterGroup from "react-leaflet-cluster";
 import "leaflet/dist/leaflet.css";
 
 import DeviceMarker from "./DeviceMarker.jsx";
@@ -39,16 +40,18 @@ export default function GridMap({ telemetry, onDeviceSelect }) {
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
 
-        {devices.map((device ) => (
-          <DeviceMarker
-            key={device.deviceId}
-            telemetry={device}
-            onSelect={onDeviceSelect}
-          />
-        ))}
+        <MarkerClusterGroup chunkedLoading maxClusterRadius={60}>
+          {devices.map((device) => (
+            <DeviceMarker
+              key={device.deviceId}
+              telemetry={device}
+              onSelect={onDeviceSelect}
+            />
+          ))}
+        </MarkerClusterGroup>
       </MapContainer>
 
-      {/* Floating GIS Map Legend & Mode Indicator */}
+      {/* GIS Legend */}
       <div
         style={{
           position: "absolute",
@@ -65,6 +68,7 @@ export default function GridMap({ telemetry, onDeviceSelect }) {
           fontSize: "12px",
           color: "#0f172a",
           maxWidth: "240px",
+          pointerEvents: "none",
         }}
       >
         <div
@@ -94,42 +98,12 @@ export default function GridMap({ telemetry, onDeviceSelect }) {
 
         <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <span style={{ fontSize: "14px" }}>☀</span>
+            <span style={{ fontSize: "14px" }}>☀️</span>
             <span>Solar Array (Active)</span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
             <span style={{ fontSize: "14px" }}>▣</span>
             <span>Home Battery Storage</span>
-          </div>
-
-          <div
-            style={{
-              margin: "4px 0",
-              borderTop: "1px solid #f1f5f9",
-              paddingTop: "6px",
-            }}
-          >
-            <div style={{ fontWeight: 600, marginBottom: "4px", color: "#475569" }}>
-              Status Indicators
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px 8px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#06b6d4", display: "inline-block" }}></span>
-                <span>Charging</span>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#f59e0b", display: "inline-block" }}></span>
-                <span>Discharge</span>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#64748b", display: "inline-block" }}></span>
-                <span>Idle</span>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#ef4444", display: "inline-block" }}></span>
-                <span>Fault</span>
-              </div>
-            </div>
           </div>
         </div>
       </div>
