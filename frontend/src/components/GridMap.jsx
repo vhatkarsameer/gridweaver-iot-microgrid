@@ -1,79 +1,111 @@
-import { MapContainer, TileLayer } from 'react-leaflet';
-import MarkerClusterGroup from 'react-leaflet-cluster';
-import DeviceMarker from './DeviceMarker.jsx';
-import 'leaflet/dist/leaflet.css';
+import { MapContainer, TileLayer } from "react-leaflet";
+import MarkerClusterGroup from "react-leaflet-cluster";
+import "leaflet/dist/leaflet.css";
 
-const MAHARASHTRA_CENTER = [19.7515, 75.7139];
-const MAHARASHTRA_ZOOM = 7;
+import DeviceMarker from "./DeviceMarker.jsx";
+import { mockTelemetry } from "../data/mockTelemetry.js";
 
-const MAHARASHTRA_BOUNDS = [
-  [15.5, 72.0],
-  [22.2, 81.5],
-];
+const MUMBAI_CENTER = [19.076, 72.8777];
 
-export default function GridMap({ devices = [], telemetry = [] }) {
-  const inputDevices = devices.length > 0 ? devices : telemetry;
-  const safeDevices = Array.isArray(inputDevices)
-    ? inputDevices
-    : Object.values(inputDevices || {});
+export default function GridMap({ telemetry, onDeviceSelect }) {
+  const devices = Array.isArray(telemetry) && telemetry.length > 0
+    ? telemetry
+    : mockTelemetry;
+
+  const isUsingMock = !telemetry || telemetry.length === 0 || telemetry === mockTelemetry;
 
   return (
     <section
-      className="grid-map-shell"
-      aria-label="Maharashtra live microgrid map"
+      aria-label="Mumbai microgrid map"
+      style={{
+        position: "relative",
+        width: "100%",
+        height: "100%",
+        minHeight: "540px",
+        overflow: "hidden",
+        borderRadius: "12px",
+        boxShadow: "0 4px 20px rgba(15, 23, 42, 0.08)",
+      }}
     >
-      <div className="grid-map-toolbar">
-        <div>
-          <p className="grid-map-eyebrow">LIVE GIS VIEW</p>
-          <h2>Maharashtra device network</h2>
-        </div>
-        <span className="grid-map-count">
-          {safeDevices.length}{' '}
-          {safeDevices.length === 1 ? 'device' : 'devices'}
-        </span>
-      </div>
+      <MapContainer
+        center={MUMBAI_CENTER}
+        zoom={11}
+        minZoom={9}
+        maxZoom={18}
+        scrollWheelZoom={true}
+        style={{ width: "100%", height: "100%", minHeight: "540px" }}
+      >
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
 
-      <div className="grid-map-canvas">
-        <MapContainer
-          center={MAHARASHTRA_CENTER}
-          zoom={MAHARASHTRA_ZOOM}
-          minZoom={5}
-          maxZoom={18}
-          maxBounds={MAHARASHTRA_BOUNDS}
-          maxBoundsViscosity={0.25}
-          scrollWheelZoom
-          zoomControl
-          preferCanvas
-          zoomAnimation={false}
-          markerZoomAnimation={false}
-          style={{ width: '100%', height: '100%', minHeight: '540px' }}
+        <MarkerClusterGroup chunkedLoading maxClusterRadius={60}>
+          {devices.map((device) => (
+            <DeviceMarker
+              key={device.deviceId}
+              telemetry={device}
+              onSelect={onDeviceSelect}
+            />
+          ))}
+        </MarkerClusterGroup>
+      </MapContainer>
+
+      {/* GIS Legend */}
+      <div
+        style={{
+          position: "absolute",
+          bottom: "24px",
+          right: "24px",
+          zIndex: 1000,
+          background: "rgba(255, 255, 255, 0.95)",
+          backdropFilter: "blur(8px)",
+          border: "1px solid #cbd5e1",
+          borderRadius: "10px",
+          padding: "14px 16px",
+          boxShadow: "0 10px 25px rgba(15, 23, 42, 0.15)",
+          fontFamily: "Arial, sans-serif",
+          fontSize: "12px",
+          color: "#0f172a",
+          maxWidth: "240px",
+          pointerEvents: "none",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: "10px",
+            borderBottom: "1px solid #e2e8f0",
+            paddingBottom: "6px",
+          }}
         >
-          <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            updateWhenZooming={false}
-            updateWhenIdle
-            keepBuffer={1}
-          />
-
-          <MarkerClusterGroup
-            chunkedLoading
-            chunkInterval={100}
-            chunkDelay={25}
-            removeOutsideVisibleBounds
-            animate={false}
-            showCoverageOnHover={false}
-            maxClusterRadius={60}
+          <strong style={{ fontSize: "13px" }}>Mumbai Microgrid Legend</strong>
+          <span
+            style={{
+              fontSize: "10px",
+              padding: "2px 6px",
+              borderRadius: "4px",
+              fontWeight: 700,
+              background: isUsingMock ? "#fef3c7" : "#d1fae5",
+              color: isUsingMock ? "#d97706" : "#059669",
+            }}
           >
-            {safeDevices.map((device) => (
-              <DeviceMarker
-                key={device.deviceId}
-                device={device}
-          />
+            {isUsingMock ? "WEEK 1 MOCK" : "LIVE STOMP"}
+          </span>
+        </div>
 
-            ))}
-          </MarkerClusterGroup>
-        </MapContainer>
+        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <span style={{ fontSize: "14px" }}>☀️</span>
+            <span>Solar Array (Active)</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <span style={{ fontSize: "14px" }}>▣</span>
+            <span>Home Battery Storage</span>
+          </div>
+        </div>
       </div>
     </section>
   );

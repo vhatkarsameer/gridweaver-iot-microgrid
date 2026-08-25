@@ -1,337 +1,265 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Client } from '@stomp/stompjs';
-import GridMap from './components/GridMap.jsx';
-import * as mockTelemetryModule from './data/mockTelemetry.js';
-import './App.css';
+import React, { useEffect, useState } from "react";
+import { Client } from "@stomp/stompjs";
+import "./App.css";
 
-const DEFAULT_BROKER_URL = 'ws://localhost:8080/ws-grid';
-const TELEMETRY_TOPIC = '/topic/telemetry';
-const THEME_STORAGE_KEY = 'app-theme';
-const UI_UPDATE_INTERVAL = 1000;
+import GridMap from "./components/GridMap.jsx";
+import { mockTelemetry } from "./data/mockTelemetry.js";
 
-const VALID_STATUSES = new Set([
-  'CHARGING',
-  'IDLE',
-  'GENERATING',
-  'DISCHARGING',
-  'FAULT',
-]);
-
-const MAHARASHTRA_CENTER = {
-  latitude: 19.7515,
-  longitude: 75.7139,
+const statusColors = {
+  IDLE: "#64748b",
+  CHARGING: "#06b6d4",
+  DISCHARGING: "#f59e0b",
+  FAULT: "#ef4444",
 };
 
-function getMockDevices() {
-  const exportedDevices =
-    mockTelemetryModule.initialMockDevices ??
-    mockTelemetryModule.mockTelemetry ??
-    mockTelemetryModule.default ??
-    [];
-
-  if (Array.isArray(exportedDevices)) {
-    return exportedDevices;
-  }
-
-  if (exportedDevices && typeof exportedDevices === 'object') {
-    return Object.values(exportedDevices);
-  }
-
-  return [];
-}
-
-function toNumber(value, fallback = 0) {
-  const number = Number(value);
-  return Number.isFinite(number) ? number : fallback;
-}
-
-function normalizeTelemetry(payload, previous = {}) {
-  if (!payload || !payload.deviceId) {
-    return null;
-  }
-
-  const merged = { ...previous, ...payload };
-  const rawStatus = String(
-    merged.status ?? merged.state ?? 'IDLE',
-  ).toUpperCase();
-  const status = VALID_STATUSES.has(rawStatus) ? rawStatus : 'IDLE';
-
-  return {
-    ...merged,
-    deviceId: String(merged.deviceId),
-    deviceType: merged.deviceType ?? previous.deviceType ?? 'UNKNOWN_DEVICE',
-    status,
-    outputWatts: toNumber(merged.outputWatts, previous.outputWatts ?? 0),
-    batteryLevelPct: toNumber(
-      merged.batteryLevelPct,
-      previous.batteryLevelPct ?? 0,
-    ),
-    latitude: toNumber(
-      merged.latitude,
-      previous.latitude ?? MAHARASHTRA_CENTER.latitude,
-    ),
-    longitude: toNumber(
-      merged.longitude,
-      previous.longitude ?? MAHARASHTRA_CENTER.longitude,
-    ),
-    timestamp: merged.timestamp ?? new Date().toISOString(),
-  };
-}
-
-function createInitialDeviceMap() {
-  return getMockDevices().reduce((deviceMap, device) => {
-    const normalizedDevice = normalizeTelemetry(device);
-
-    if (normalizedDevice) {
-      deviceMap[normalizedDevice.deviceId] = normalizedDevice;
-    }
-
-    return deviceMap;
-  }, {});
-}
-
 export default function App() {
-  const [devicesById, setDevicesById] = useState(() => createInitialDeviceMap());
-  const [isConnected, setIsConnected] = useState(false);
-  const [connectionError, setConnectionError] = useState('');
-  const [lastMessageAt, setLastMessageAt] = useState(null);
-  const [isDark, setIsDark] = useState(() => {
-    return localStorage.getItem(THEME_STORAGE_KEY) === 'dark';
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    const savedTheme = localStorage.getItem("app-theme");
+    return savedTheme === "dark";
   });
 
-  const devicesByIdRef = useRef(devicesById);
-  const pendingDevicesRef = useRef(null);
-  const pendingMessageAtRef = useRef(null);
-  const updateTimerRef = useRef(null);
+  useEffect(() => {
+    localStorage.setItem("app-theme", isDarkMode ? "dark" : "light");
+    if (isDarkMode) {
+      document.body.classList.add("dark-mode");
+    } else {
+      document.body.classList.remove("dark-mode");
+    }
+  }, [isDarkMode]);
 
-  const devices = useMemo(
-    () => Object.values(devicesById),
-    [devicesById],
-  );
+  const [householdMap, setHouseholdMap] = useState({});
+  const [connected, setConnected] = useState(false);
+  const [gridSummary, setGridSummary] = useState(null);
+
+  // Track the full selected device object in state for the persistent overlay card
+  const [selectedDeviceObj, setSelectedDeviceObj] = useState(null);
 
   useEffect(() => {
-    localStorage.setItem(
-      THEME_STORAGE_KEY,
-      isDark ? 'dark' : 'light',
-    );
-  }, [isDark]);
-
-  useEffect(() => {
-    const brokerUrl =
-      import.meta.env.VITE_TELEMETRY_WS_URL || DEFAULT_BROKER_URL;
-
-    const flushTelemetryUpdates = () => {
-      if (pendingDevicesRef.current) {
-        setDevicesById(pendingDevicesRef.current);
-        pendingDevicesRef.current = null;
-      }
-
-      if (pendingMessageAtRef.current) {
-        setLastMessageAt(pendingMessageAtRef.current);
-        pendingMessageAtRef.current = null;
-      }
-
-      updateTimerRef.current = null;
-    };
-
-    const scheduleTelemetryUpdate = () => {
-      if (updateTimerRef.current !== null) {
-        return;
-      }
-
-      updateTimerRef.current = window.setTimeout(
-        flushTelemetryUpdates,
-        UI_UPDATE_INTERVAL,
-      );
-    };
-
     const client = new Client({
-      brokerURL: brokerUrl,
+      brokerURL: "ws://localhost:8080/ws-grid",
       reconnectDelay: 3000,
-
       onConnect: () => {
-        setIsConnected(true);
-        setConnectionError('');
+        setConnected(true);
 
-        client.subscribe(TELEMETRY_TOPIC, (message) => {
-          if (!message.body) {
-            return;
+        client.subscribe("/topic/telemetry", (message) => {
+          if (!message.body) return;
+
+          const payload = JSON.parse(message.body);
+
+          if (payload.deviceType === "BATTERY") {
+            payload.latitude += 0.0001;
+            payload.longitude += 0.0001;
           }
 
-          try {
-            const payload = JSON.parse(message.body);
-            const currentDevices = devicesByIdRef.current;
-            const previousDevice = currentDevices[payload.deviceId] ?? {};
-            const updatedDevice = normalizeTelemetry(
-              payload,
-              previousDevice,
-            );
+          const houseId = payload.deviceId
+            .replace("SOLAR-", "")
+            .replace("BATT-", "");
 
-            if (!updatedDevice) {
-              return;
-            }
-
-            const nextDevices = {
-              ...currentDevices,
-              [updatedDevice.deviceId]: updatedDevice,
+          setHouseholdMap((previousMap) => {
+            const currentHouse = previousMap[houseId] || {
+              houseId,
+              latitude: payload.latitude,
+              longitude: payload.longitude,
+              solar: null,
+              battery: null,
             };
 
-            // Keep the latest data in a ref immediately, but update React only
-            // once per second so the whole map does not re-render per message.
-            devicesByIdRef.current = nextDevices;
-            pendingDevicesRef.current = nextDevices;
-            pendingMessageAtRef.current = new Date();
-            scheduleTelemetryUpdate();
-          } catch (error) {
-            console.error('Unable to parse telemetry message:', error);
-            setConnectionError('Received an invalid telemetry message.');
-          }
+            if (payload.deviceType === "SOLAR_PANEL") {
+              currentHouse.solar = payload;
+            } else if (payload.deviceType === "BATTERY") {
+              currentHouse.battery = payload;
+            }
+
+            return {
+              ...previousMap,
+              [houseId]: { ...currentHouse },
+            };
+          });
+        });
+
+        client.subscribe("/topic/grid-state", (message) => {
+          if (!message.body) return;
+          const summary = JSON.parse(message.body);
+          setGridSummary(summary);
         });
       },
 
-      onDisconnect: () => {
-        setIsConnected(false);
-      },
-
-      onWebSocketClose: () => {
-        setIsConnected(false);
-      },
-
-      onWebSocketError: () => {
-        setIsConnected(false);
-        setConnectionError('Unable to reach the telemetry WebSocket.');
-      },
-
-      onStompError: (frame) => {
-        setIsConnected(false);
-        setConnectionError(
-          frame.headers?.message || 'The telemetry broker returned an error.',
-        );
-      },
+      onWebSocketClose: () => setConnected(false),
+      onDisconnect: () => setConnected(false),
+      onStompError: () => setConnected(false),
     });
 
     client.activate();
 
     return () => {
-      if (updateTimerRef.current !== null) {
-        window.clearTimeout(updateTimerRef.current);
-        updateTimerRef.current = null;
-      }
-
-      flushTelemetryUpdates();
       client.deactivate();
     };
   }, []);
 
-  const totalSolarGeneration = devices
-    .filter((device) => device.deviceType === 'SOLAR_PANEL')
-    .reduce(
-      (total, device) => total + Number(device.outputWatts || 0),
-      0,
-    );
+  const households = Object.values(householdMap);
 
-  const batteryDevices = devices.filter(
-    (device) => device.deviceType === 'BATTERY',
+  const totalSolarWatts = households.reduce(
+    (sum, house) => sum + (house.solar ? house.solar.outputWatts : 0),
+    0,
   );
 
-  const averageBatteryLevel = batteryDevices.length
-    ? batteryDevices.reduce(
-        (total, device) => total + Number(device.batteryLevelPct || 0),
-        0,
-      ) / batteryDevices.length
-    : 0;
+  const totalBatteryWatts = households.reduce(
+    (sum, house) => sum + (house.battery ? house.battery.outputWatts : 0),
+    0,
+  );
 
-  const netGridBalance = devices.reduce((total, device) => {
-    const output = Number(device.outputWatts || 0);
+  const liveTelemetry = households.flatMap((house) =>
+    [house.solar, house.battery].filter(Boolean),
+  );
 
-    if (device.deviceType === 'SOLAR_PANEL') {
-      return total + output;
-    }
+  const mapTelemetry = liveTelemetry.length > 0 ? liveTelemetry : mockTelemetry;
 
-    if (device.deviceType === 'BATTERY') {
-      return total - output;
-    }
-
-    return total;
-  }, 0);
-
-  const latestMessageLabel = lastMessageAt
-    ? lastMessageAt.toLocaleTimeString()
-    : 'Waiting for telemetry';
-
-  function toggleDarkTheme() {
-    setIsDark((current) => !current);
-  }
+  // Continuously bind the selected device to the live telemetry stream so values tick live
+  const activeSelectedDevice = selectedDeviceObj
+    ? mapTelemetry.find(t => t.deviceId === selectedDeviceObj.deviceId) || selectedDeviceObj
+    : null;
 
   return (
-    <div className={`app-shell ${isDark ? 'dark' : ''}`}>
-      <header className="app-header">
+    <div className="dashboard-container">
+      <header className="dashboard-header">
         <div>
-          <p className="eyebrow">GRIDWEAVER · WEEK 2</p>
-          <h1>Maharashtra Microgrid GIS</h1>
-          <p className="app-subtitle">
-            Live device-state visualization across Maharashtra
-          </p>
+          <h1>GridWeaver Microgrid Control Tower</h1>
+          <p className="subtitle">Real-time Maharashtra Household Energy Matrix</p>
         </div>
 
-        <div className="app-header-actions">
-          <div className="connection-panel" aria-live="polite">
-            <span
-              className={`connection-dot ${
-                isConnected ? 'online' : 'offline'
-              }`}
-              aria-hidden="true"
-            />
-            <div>
-              <strong>
-                {isConnected ? 'Live stream connected' : 'Offline fallback'}
-              </strong>
-              <span>{latestMessageLabel}</span>
-            </div>
-          </div>
-
+        <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
           <button
-            type="button"
-            className="theme-toggle"
-            onClick={toggleDarkTheme}
-            aria-label="Toggle dark theme"
+            className="theme-toggle-btn"
+            onClick={() => setIsDarkMode(!isDarkMode)}
           >
-            {isDark ? 'Light mode' : 'Dark mode'}
+            {isDarkMode ? "☀️ Light" : "🌙 Dark"}
           </button>
+
+          <div className={`status-badge ${connected ? "online" : "offline"}`}>
+            {connected ? "● LIVE STREAM CONNECTED" : "○ DISCONNECTED"}
+          </div>
         </div>
       </header>
 
       <div className="stats-grid">
         <div className="stat-card">
           <h3>Net Grid Balance</h3>
-          <p className="stat-value">{netGridBalance.toFixed(1)} W</p>
+          <p className="stat-value" style={{ color: gridSummary && gridSummary.netGridBalanceKw >= 0 ? '#10b981' : '#ef4444' }}>
+            {gridSummary ? `${gridSummary.netGridBalanceKw.toFixed(1)} kW` : 'Loading...'}
+          </p>
         </div>
-
         <div className="stat-card">
           <h3>Total Solar Generation</h3>
           <p className="stat-value watts">
-            {totalSolarGeneration.toFixed(1)} W
+            {gridSummary ? `${gridSummary.totalSolarGenerationKw.toFixed(1)} kW` : `${totalSolarWatts.toFixed(1)} W`}
           </p>
         </div>
-
+        <div className="stat-card">
+          <h3>Total Battery Demand</h3>
+          <p className="stat-value battery">
+            {gridSummary ? `${gridSummary.totalBatteryDemandKw.toFixed(1)} kW` : `${totalBatteryWatts.toFixed(1)} W`}
+          </p>
+        </div>
         <div className="stat-card">
           <h3>Avg Battery Level</h3>
-          <p className="stat-value battery">
-            {averageBatteryLevel.toFixed(1)}%
+          <p className="stat-value">
+            {gridSummary ? `${gridSummary.averageBatterySocPercentage.toFixed(1)}%` : 'Loading...'}
           </p>
         </div>
       </div>
 
-      {connectionError && (
-        <p className="connection-error" role="status">
-          {connectionError} Mock telemetry remains visible while the backend is
-          unavailable.
-        </p>
-      )}
+      <section
+        style={{
+          position: "relative",
+          margin: "24px 0",
+          padding: "16px",
+          background: isDarkMode ? "#1e293b" : "#ffffff",
+          border: `1px solid ${isDarkMode ? "#334155" : "#e2e8f0"}`,
+          borderRadius: "12px",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: "16px",
+            marginBottom: "14px",
+          }}
+        >
+          <div>
+            <h2 style={{ margin: 0 }}>Maharashtra GIS Device Map</h2>
+            <p style={{ margin: "6px 0 0", color: "#64748b" }}>
+              {liveTelemetry.length > 0
+                ? "Showing live telemetry from the backend"
+                : "Showing static Week 1 preview data"}
+            </p>
+          </div>
+          <strong style={{ color: connected ? "#10b981" : "#64748b" }}>
+            {mapTelemetry.length} devices
+          </strong>
+        </div>
 
-      <main className="map-panel">
-        <GridMap telemetry={devices} />
-      </main>
+        {/* Map Container Wrapper with Decoupled Floating Card Overlay */}
+        <div style={{ position: "relative", width: "100%", height: "580px" }}>
+          <GridMap
+            telemetry={mapTelemetry}
+            onDeviceSelect={(device) => setSelectedDeviceObj(device)}
+          />
+
+          {/* Bulletproof Floating Details Card */}
+          {activeSelectedDevice && (
+            <div
+              style={{
+                position: "absolute",
+                top: "16px",
+                right: "16px",
+                zIndex: 3000,
+                minWidth: "260px",
+                background: isDarkMode ? "#0f172a" : "#ffffff",
+                color: isDarkMode ? "#f8fafc" : "#0f172a",
+                border: `1px solid ${isDarkMode ? "#334155" : "#cbd5e1"}`,
+                borderRadius: "10px",
+                padding: "16px",
+                boxShadow: "0 10px 25px rgba(0,0,0,0.3)",
+                fontFamily: "Arial, sans-serif",
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                <strong style={{ fontFamily: "monospace", fontSize: "14px" }}>
+                  {activeSelectedDevice.deviceId}
+                </strong>
+                <button
+                  onClick={() => setSelectedDeviceObj(null)}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    color: "inherit",
+                    cursor: "pointer",
+                    fontSize: "16px",
+                    fontWeight: "bold",
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div style={{ fontSize: "13px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 10px" }}>
+                <span style={{ color: "#64748b" }}>Status:</span>
+                <span style={{ fontWeight: 700, color: statusColors[activeSelectedDevice.status] || "#06b6d4" }}>
+                  {activeSelectedDevice.status}
+                </span>
+
+                <span style={{ color: "#64748b" }}>Output:</span>
+                <span>{(Number(activeSelectedDevice.outputWatts || 0) / 1000).toFixed(1)} kW</span>
+
+                <span style={{ color: "#64748b" }}>Battery:</span>
+                <span>{Number(activeSelectedDevice.batteryLevelPct || 0).toFixed(1)}%</span>
+              </div>
+            </div>
+          )}
+        </div>
+      </section>
     </div>
   );
 }
