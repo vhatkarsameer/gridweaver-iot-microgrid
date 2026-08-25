@@ -5,21 +5,6 @@ import "./App.css";
 import GridMap from "./components/GridMap.jsx";
 import { mockTelemetry } from "./data/mockTelemetry.js";
 
-function App() {
-
-  const[isDarkMode, setIsDarkMode] = useState(() => {
-      const savedTheme = localStorage.getItem("app-theme");
-      return savedTheme === "dark";
-  });
-    useEffect(() => {
-        localStorage.setItem("app-thema", isDarkMode ? "dark" : "light");
-        if(isDarkMode) {
-            document.body.classList.add("dark-mode");
-        }
-        else {
-            document.body.classList.remove("dark-mode");
-            }
-        }, [isDarkMode]);
 const statusColors = {
   IDLE: "#64748b",
   CHARGING: "#06b6d4",
@@ -49,13 +34,9 @@ export default function App() {
   // Track the full selected device object in state for the persistent overlay card
   const [selectedDeviceObj, setSelectedDeviceObj] = useState(null);
 
-  // State to hold the live aggregated math from the backend engine
-  const [gridSummary, setGridSummary] = useState(null);
-
   useEffect(() => {
     const client = new Client({
       brokerURL: "ws://localhost:8080/ws-grid",
-
       reconnectDelay: 3000,
       onConnect: () => {
         setConnected(true);
@@ -97,11 +78,6 @@ export default function App() {
         });
 
         client.subscribe("/topic/grid-state", (message) => {
-            if(!message.body) return;
-
-            console.log("BACKEND SUMMARY DATA:", message.body);
-            const summary = JSON.parse(message.body);
-            setGridSummary(summary);
           if (!message.body) return;
           const summary = JSON.parse(message.body);
           setGridSummary(summary);
@@ -151,45 +127,6 @@ export default function App() {
           <p className="subtitle">Real-time Maharashtra Household Energy Matrix</p>
         </div>
 
-                <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-                  <button
-                    className="theme-toggle-btn"
-                    onClick={() => setIsDarkMode(!isDarkMode)}
-                  >
-                    {isDarkMode ? "☀️ Light" : "🌙 Dark"}
-                  </button>
-
-                  <div className={`status-badge ${connected ? "online" : "offline"}`}>
-                    {connected ? "● LIVE STREAM CONNECTED" : "○ DISCONNECTED"}
-                  </div>
-                </div>
-      </header>
-
-      <div className="stats-grid">
-          <div className="stat-card">
-              <h3>Net Grid Balance</h3>
-              <p className="stat-value" style={{ color: gridSummary && gridSummary.netGridBalanceKw >= 0 ? '#10b981' : '#ef4444' }}>
-                  {gridSummary ? `${gridSummary.netGridBalanceKw.toFixed(1)} kW` : 'Loading...'}
-              </p>
-          </div>
-          <div className="stat-card">
-              <h3>Total Solar Generation</h3>
-              <p className="stat-value watts">
-                  {gridSummary ? `${gridSummary.totalSolarGenerationKw.toFixed(1)} kW` : `${totalSolarWatts.toFixed(1)} W`}
-              </p>
-          </div>
-          <div className="stat-card">
-              <h3>Total Battery Demand</h3>
-              <p className="stat-value battery">
-                  {gridSummary ? `${gridSummary.totalBatteryDemandKw.toFixed(1)} kW` : `${totalBatteryWatts.toFixed(1)} W`}
-              </p>
-              </div>
-          <div className="stat-card">
-              <h3>Avg Battery Level</h3>
-              <p className="stat-value">
-                  {gridSummary ? `${gridSummary.averageBatterySocPercentage.toFixed(1)}%` : 'Loading...'}
-              </p>
-          </div>
         <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
           <button
             className="theme-toggle-btn"
@@ -239,7 +176,6 @@ export default function App() {
           background: isDarkMode ? "#1e293b" : "#ffffff",
           border: `1px solid ${isDarkMode ? "#334155" : "#e2e8f0"}`,
           borderRadius: "12px",
-          transition: "background 0.3s ease, border 0.3s ease"
         }}
       >
         <div
@@ -271,44 +207,7 @@ export default function App() {
             onDeviceSelect={(device) => setSelectedDeviceObj(device)}
           />
 
-        <div className="filter-group">
-          <button
-            className={`filter-btn ${filterType === "ALL" ? "active" : ""}`}
-            onClick={() => setFilterType("ALL")}
-          >
-            All Households
-          </button>
-          <button
-            className={`filter-btn ${filterType === "SOLAR" ? "active" : ""}`}
-            onClick={() => setFilterType("SOLAR")}
-          >
-            Solar Active
-          </button>
-          <button
-            className={`filter-btn ${filterType === "BATTERY" ? "active" : ""}`}
-            onClick={() => setFilterType("BATTERY")}
-          >
-            Battery Active
-          </button>
-        </div>
-      </div>
-
-      <div className="feed-section">
-        <h2>
-          Maharashtra Microgrid Households
-          <span className="count-badge">
-            Showing {filteredHouseholds.length} of {households.length}
-          </span>
-        </h2>
-
-        <div className="household-2d-grid">
-          {filteredHouseholds.map((house) => (
-            <div key={house.houseId} className="house-card">
-              <div className="house-card-header">
-                <span className="house-id">{house.houseId}</span>
-                <span className="gps-tag">
-                  {house.latitude.toFixed(4)}, {house.longitude.toFixed(4)}
-                </span>
+          {/* Bulletproof Floating Details Card */}
           {activeSelectedDevice && (
             <div
               style={{
@@ -351,28 +250,6 @@ export default function App() {
                   {activeSelectedDevice.status}
                 </span>
 
-                {(filterType === "ALL" || filterType === "BATTERY") && (
-                  <div className="device-box battery">
-                    <div className="device-title">Home Battery</div>
-                    {house.battery ? (
-                      <>
-                        <div className="device-value">
-                          {house.battery.outputWatts.toFixed(1)} W
-                        </div>
-                        <div className="battery-level">
-                          Charge: {house.battery.batteryLevelPct.toFixed(1)}%
-                        </div>
-                        <span
-                          className={`status-tag ${house.battery.status?.toLowerCase()}`}
-                        >
-                          {house.battery.status}
-                        </span>
-                      </>
-                    ) : (
-                      <div className="device-value offline">Connecting...</div>
-                    )}
-                  </div>
-                )}
                 <span style={{ color: "#64748b" }}>Output:</span>
                 <span>{(Number(activeSelectedDevice.outputWatts || 0) / 1000).toFixed(1)} kW</span>
 
@@ -386,4 +263,3 @@ export default function App() {
     </div>
   );
 }
-
