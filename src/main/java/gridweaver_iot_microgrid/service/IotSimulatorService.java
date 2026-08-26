@@ -19,7 +19,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 @Service
-// Allow disabling the 10,000 thread simulator in test profiles if needed
 @ConditionalOnProperty(name = "iot.simulator.enabled", havingValue = "true", matchIfMissing = true)
 public class IotSimulatorService {
 
@@ -110,6 +109,9 @@ public class IotSimulatorService {
                 );
 
                 kafkaProducer.publishTelemetry(payload);
+
+                // Broadcast payload to WebSocket topic
+                messagingTemplate.convertAndSend("/topic/telemetry", finalPayload);
 
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();

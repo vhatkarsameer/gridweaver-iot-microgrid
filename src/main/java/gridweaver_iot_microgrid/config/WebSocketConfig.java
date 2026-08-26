@@ -23,7 +23,6 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                 .setAllowedOriginPatterns("*");
     }
 
-    // Increase WebSocket buffer thresholds so high-concurrency streams don't force-close sessions
     @Override
     public void configureWebSocketTransport(WebSocketTransportRegistration registration) {
         registration.setMessageSizeLimit(512 * 1024);         // 512 KB per message

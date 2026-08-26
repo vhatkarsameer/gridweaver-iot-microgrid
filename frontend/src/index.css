@@ -18,6 +18,122 @@ body {
   color: #0f172a;
 }
 
+:root {
+  --page-bg: #f8fafc;
+  --surface: rgba(255, 255, 255, 0.95);
+  --surface-solid: #ffffff;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --border-color: #cbd5e1;
+  --divider-color: #e2e8f0;
+  --button-bg: #ffffff;
+  --button-text: #0f172a;
+  --shadow-color: rgba(15, 23, 42, 0.15);
+}
+
+.dark {
+  --page-bg: #0f172a;
+  --surface: rgba(15, 23, 42, 0.95);
+  --surface-solid: #1e293b;
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --border-color: #475569;
+  --divider-color: #334155;
+  --button-bg: #334155;
+  --button-text: #f8fafc;
+  --shadow-color: rgba(0, 0, 0, 0.45);
+}
+
+body {
+  background: var(--page-bg);
+  color: var(--text-primary);
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.app-shell {
+  min-height: 100vh;
+  background: var(--page-bg);
+  color: var(--text-primary);
+}
+
+.grid-map-wrapper {
+  position: relative;
+  width: 100%;
+  min-height: 540px;
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--page-bg);
+}
+
+.map-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 64px;
+  padding: 12px 20px;
+  background: var(--surface-solid);
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--divider-color);
+}
+
+.theme-toggle {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 1000;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: var(--button-bg);
+  color: var(--button-text);
+  cursor: pointer;
+  font-weight: 600;
+  box-shadow: 0 4px 12px var(--shadow-color);
+}
+
+.theme-toggle:hover {
+  opacity: 0.85;
+}
+
+.map-legend {
+  position: absolute;
+  right: 24px;
+  bottom: 24px;
+  z-index: 1000;
+  max-width: 240px;
+  padding: 14px 16px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text-primary);
+  box-shadow: 0 10px 25px var(--shadow-color);
+  backdrop-filter: blur(8px);
+}
+
+.dark .leaflet-control-zoom a,
+.dark .leaflet-bar a {
+  border-color: var(--border-color);
+  background: var(--surface-solid);
+  color: var(--text-primary);
+}
+
+.dark .leaflet-control-zoom a:hover,
+.dark .leaflet-bar a:hover {
+  background: #475569;
+  color: #ffffff;
+}
+
+.dark .leaflet-popup-content-wrapper,
+.dark .leaflet-popup-tip {
+  background: var(--surface-solid);
+  color: var(--text-primary);
+}
+
+.dark .leaflet-popup-content {
+  color: var(--text-primary);
+}
+
+
 button,
 input,
 textarea,
