@@ -35,66 +35,162 @@ export default function App() {
   const [selectedDeviceObj, setSelectedDeviceObj] = useState(null);
 
   useEffect(() => {
-    const client = new Client({
-      brokerURL: "ws://localhost:8080/ws-grid",
-      reconnectDelay: 3000,
-      onConnect: () => {
-        setConnected(true);
+      // 1. Create a silent buffer outside of React state
+      let messageBuffer = [];
 
-        client.subscribe("/topic/telemetry", (message) => {
-          if (!message.body) return;
+      const client = new Client({
+        brokerURL: "ws://localhost:8080/ws-grid",
+        reconnectDelay: 3000,
+        onConnect: () => {
+          setConnected(true);
 
-          const payload = JSON.parse(message.body);
+          client.subscribe("/topic/telemetry", (message) => {
+            if (!message.body) return;
+            const payload = JSON.parse(message.body);
 
-          if (payload.deviceType === "BATTERY") {
-            payload.latitude += 0.0001;
-            payload.longitude += 0.0001;
-          }
-
-          const houseId = payload.deviceId
-            .replace("SOLAR-", "")
-            .replace("BATT-", "");
-
-          setHouseholdMap((previousMap) => {
-            const currentHouse = previousMap[houseId] || {
-              houseId,
-              latitude: payload.latitude,
-              longitude: payload.longitude,
-              solar: null,
-              battery: null,
-            };
-
-            if (payload.deviceType === "SOLAR_PANEL") {
-              currentHouse.solar = payload;
-            } else if (payload.deviceType === "BATTERY") {
-              currentHouse.battery = payload;
+            if (payload.deviceType === "BATTERY") {
+              payload.latitude += 0.0001;
+              payload.longitude += 0.0001;
             }
 
-            return {
-              ...previousMap,
-              [houseId]: { ...currentHouse },
-            };
+            // 2. Just push to the buffer. DO NOT trigger a React state update here.
+            messageBuffer.push(payload);
           });
+
+          client.subscribe("/topic/grid-state", (message) => {
+            if (!message.body) return;
+            setGridSummary(JSON.parse(message.body));
+          });
+        },
+        onWebSocketClose: () => setConnected(false),
+        onDisconnect: () => setConnected(false),
+        onStompError: () => setConnected(false),
+      });
+
+      client.activate();
+
+      // 3. Flush the buffer into React state exactly once every 1000ms
+      const flushInterval = setInterval(() => {
+        if (messageBuffer.length === 0) return;
+
+        // Take a snapshot of the current buffer and instantly clear it
+        const currentBatch = [...messageBuffer];
+        messageBuffer = [];
+
+        setHouseholdMap((previousMap) => {
+          // Clone the map once per batch, not once per message
+          const updatedMap = { ...previousMap };
+
+          currentBatch.forEach((payload) => {
+            const houseId = payload.deviceId
+              .replace("SOLAR-", "")
+              .replace("BATT-", "");
+
+            if (!updatedMap[houseId]) {
+              updatedMap[houseId] = {
+                houseId,
+                latitude: payload.latitude,
+                longitude: payload.longitude,
+                solar: null,
+                battery: null,
+              };
+            }
+
+            if (payload.deviceType === "SOLAR_PANEL") {
+              updatedMap[houseId].solar = payload;
+            } else if (payload.deviceType === "BATTERY") {
+              updatedMap[houseId].battery = payload;
+            }
+          });
+
+          return updatedMap;
         });
+      }, 1000); // UI updates only once per second
 
-        client.subscribe("/topic/grid-state", (message) => {
-          if (!message.body) return;
-          const summary = JSON.parse(message.body);
-          setGridSummary(summary);
-        });
-      },
+      return () => {
+        clearInterval(flushInterval);
+        client.deactivate();
+      };
 
-      onWebSocketClose: () => setConnected(false),
-      onDisconnect: () => setConnected(false),
-      onStompError: () => setConnected(false),
-    });
+    }, []);
+useEffect(() => {
+               // 1. Create a silent buffer outside of React state
+               let messageBuffer = [];
 
-    client.activate();
+               const client = new Client({
+                 brokerURL: "ws://localhost:8080/ws-grid",
+                 reconnectDelay: 3000,
+                 onConnect: () => {
+                   setConnected(true);
 
-    return () => {
-      client.deactivate();
-    };
-  }, []);
+                   client.subscribe("/topic/telemetry", (message) => {
+                     if (!message.body) return;
+                     const payload = JSON.parse(message.body);
+
+                     if (payload.deviceType === "BATTERY") {
+                       payload.latitude += 0.0001;
+                       payload.longitude += 0.0001;
+                     }
+
+                     // 2. Just push to the buffer. DO NOT trigger a React state update here.
+                     messageBuffer.push(payload);
+                   });
+
+                   client.subscribe("/topic/grid-state", (message) => {
+                     if (!message.body) return;
+                     setGridSummary(JSON.parse(message.body));
+                   });
+                 },
+                 onWebSocketClose: () => setConnected(false),
+                 onDisconnect: () => setConnected(false),
+                 onStompError: () => setConnected(false),
+               });
+
+               client.activate();
+
+               // 3. Flush the buffer into React state exactly once every 1000ms
+               const flushInterval = setInterval(() => {
+                 if (messageBuffer.length === 0) return;
+
+                 // Take a snapshot of the current buffer and instantly clear it
+                 const currentBatch = [...messageBuffer];
+                 messageBuffer = [];
+
+                 setHouseholdMap((previousMap) => {
+                   // Clone the map once per batch, not once per message
+                   const updatedMap = { ...previousMap };
+
+                   currentBatch.forEach((payload) => {
+                     const houseId = payload.deviceId
+                       .replace("SOLAR-", "")
+                       .replace("BATT-", "");
+
+                     if (!updatedMap[houseId]) {
+                       updatedMap[houseId] = {
+                         houseId,
+                         latitude: payload.latitude,
+                         longitude: payload.longitude,
+                         solar: null,
+                         battery: null,
+                       };
+                     }
+
+                     if (payload.deviceType === "SOLAR_PANEL") {
+                       updatedMap[houseId].solar = payload;
+                     } else if (payload.deviceType === "BATTERY") {
+                       updatedMap[houseId].battery = payload;
+                     }
+                   });
+
+                   return updatedMap;
+                 });
+               }, 1000); // UI updates only once per second
+
+               return () => {
+                 clearInterval(flushInterval);
+                 client.deactivate();
+               };
+             }, []);
 
   const households = Object.values(householdMap);
 
