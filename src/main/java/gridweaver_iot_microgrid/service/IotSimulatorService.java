@@ -8,7 +8,6 @@ import jakarta.annotation.PreDestroy;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -19,35 +18,22 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 @Service
-// Allow disabling the 10,000 thread simulator in test profiles if needed
 @ConditionalOnProperty(name = "iot.simulator.enabled", havingValue = "true", matchIfMissing = true)
 public class IotSimulatorService {
 
-    private final SimpMessagingTemplate messagingTemplate;
-    private final GridStateEngine gridStateEngine;
-    private final DeviceStateProcessor stateProcessor;
-
+    private final TelemetryKafkaProducer kafkaProducer;
     private final List<HouseholdLocation> households = new ArrayList<>();
-
-    // Maintain a reference to the executor so Spring can shut it down gracefully
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
-    public IotSimulatorService(SimpMessagingTemplate messagingTemplate, GridStateEngine gridStateEngine, DeviceStateProcessor stateProcessor) {
-        this.messagingTemplate = messagingTemplate;
-        this.gridStateEngine = gridStateEngine;
-        this.stateProcessor = stateProcessor;
+    public IotSimulatorService(TelemetryKafkaProducer kafkaProducer) {
+        this.kafkaProducer = kafkaProducer;
     }
 
-    /**
-     * Initializes 5,000 fixed Household locations across Maharashtra upon application startup,
-     * then spawns 10,000 concurrent Virtual Threads (1 Solar + 1 Battery per Household).
-     */
     @EventListener(ApplicationReadyEvent.class)
-    public void start10000ConcurrentDeviceVirtualThreads() {
+    public void startDeviceSimulationVirtualThreads() {
         Random random = new Random();
 
-        // 1. Generate 5,000 fixed household locations centered in Maharashtra
-        for (int i = 0; i < 5000; i++) {
+        for (int i = 0; i < 25000; i++) {
             String houseId = "HOUSE-MH-" + (1000 + i);
             double lat = 17.0 + (21.0 - 17.0) * random.nextDouble();
             double lng = 74.0 + (80.0 - 74.0) * random.nextDouble();
@@ -65,7 +51,7 @@ public class IotSimulatorService {
             executor.submit(() -> runVirtualDeviceLoop(batteryId, house, DeviceType.BATTERY));
         }
 
-        System.out.println("🚀 [JAVA 21 VIRTUAL THREADS] Successfully spawned 10,000 concurrent tasks across 5,000 fixed Households!");
+        System.out.println("🚀 [JAVA 21 VIRTUAL THREADS] Successfully spawned 50,000 concurrent tasks across 5,000 fixed Households!");
     }
 
     private void runVirtualDeviceLoop(String deviceId, HouseholdLocation house, DeviceType deviceType) {
@@ -73,14 +59,14 @@ public class IotSimulatorService {
 
         while (!Thread.currentThread().isInterrupted()) {
             try {
-                Thread.sleep(5000 + random.nextInt(5000));
+                Thread.sleep(30000 + random.nextInt(30000));
 
                 TelemetryPayload payload;
                 if (deviceType == DeviceType.SOLAR_PANEL) {
                     payload = new TelemetryPayload(
                             deviceId,
                             DeviceType.SOLAR_PANEL,
-                            DeviceStatus.GENERATING,
+                            DeviceStatus.IDLE,
                             random.nextDouble(80.0, 200.0),
                             0.0,
                             house.latitude(),
@@ -91,7 +77,7 @@ public class IotSimulatorService {
                     payload = new TelemetryPayload(
                             deviceId,
                             DeviceType.BATTERY,
-                            random.nextBoolean() ? DeviceStatus.CHARGING : DeviceStatus.DISCHARGING,
+                            DeviceStatus.IDLE,
                             random.nextDouble(1500.0, 2500.0),
                             random.nextDouble(40.0, 90.0),
                             house.latitude(),
@@ -100,23 +86,8 @@ public class IotSimulatorService {
                     );
                 }
 
-                DeviceStatus trueStatus = stateProcessor.processAndGetState(payload);
 
-                TelemetryPayload finalPayload = new TelemetryPayload(
-                        payload.deviceId(),
-                        payload.deviceType(),
-                        trueStatus,
-                        payload.outputWatts(),
-                        payload.batteryLevelPct(),
-                        payload.latitude(),
-                        payload.longitude(),
-                        payload.timestamp()
-                );
-
-                gridStateEngine.ingestTelemetry(payload);
-
-                // Broadcast payload to WebSocket topic
-                messagingTemplate.convertAndSend("/topic/telemetry", finalPayload);
+                kafkaProducer.publishTelemetry(payload);
 
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
@@ -125,7 +96,6 @@ public class IotSimulatorService {
         }
     }
 
-    // Gracefully shut down all 10,000 threads when Spring context closes or tests finish
     @PreDestroy
     public void stopSimulation() {
         executor.shutdownNow();

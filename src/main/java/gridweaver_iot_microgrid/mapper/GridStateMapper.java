@@ -40,9 +40,9 @@ public class GridStateMapper {
                 Instant.now(),
                 totalHouseholdsDevices,
                 activeDevices,
-                round(totalBatteryWatts),
-                round(totalBatteryWatts),
-                round(netBalanceWatts),
+                round(totalSolarWatts/1000.0),
+                round(totalBatteryWatts/1000.0),
+                round(netBalanceWatts/1000.0),
                 round(averageBatteryLevelPct)
         );
     }
