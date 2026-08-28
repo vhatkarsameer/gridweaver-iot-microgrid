@@ -1,361 +1,359 @@
-import React, { useEffect, useState } from "react";
-import { Client } from "@stomp/stompjs";
-import "./App.css";
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Client } from '@stomp/stompjs';
+import GridMap from './components/GridMap.jsx';
+import './App.css';
 
-import GridMap from "./components/GridMap.jsx";
-import { mockTelemetry } from "./data/mockTelemetry.js";
+const BROKER_URL = 'ws://localhost:8080/ws-grid';
+const TELEMETRY_DESTINATION = '/topic/telemetry';
+const UI_UPDATE_INTERVAL_MS = 1000;
+const MAX_DEVICES = 50000;
 
-const statusColors = {
-  IDLE: "#64748b",
-  CHARGING: "#06b6d4",
-  DISCHARGING: "#f59e0b",
-  FAULT: "#ef4444",
-};
+function firstDefined(...values) {
+  return values.find(
+    (value) => value !== undefined && value !== null && value !== '',
+  );
+}
+
+function asNumber(value, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function unwrapEvent(value) {
+  if (!value || typeof value !== 'object') {
+    return {};
+  }
+
+  if (value.payload && typeof value.payload === 'object') {
+    return value.payload;
+  }
+
+  if (value.data && typeof value.data === 'object') {
+    return value.data;
+  }
+
+  return value;
+}
+
+function normalizeDevice(rawMessage) {
+  const rawDevice = unwrapEvent(rawMessage);
+
+  const deviceId = firstDefined(
+    rawDevice.deviceId,
+    rawDevice.id,
+    rawDevice.nodeId,
+    rawDevice.device?.deviceId,
+    rawDevice.device?.id,
+  );
+
+  if (!deviceId) {
+    return null;
+  }
+
+  const telemetry = rawDevice.telemetry && typeof rawDevice.telemetry === 'object'
+    ? rawDevice.telemetry
+    : {};
+
+  return {
+    ...rawDevice,
+    deviceId: String(deviceId),
+    latitude: firstDefined(
+      rawDevice.latitude,
+      rawDevice.lat,
+      rawDevice.location?.latitude,
+      rawDevice.location?.lat,
+    ),
+    longitude: firstDefined(
+      rawDevice.longitude,
+      rawDevice.lng,
+      rawDevice.lon,
+      rawDevice.location?.longitude,
+      rawDevice.location?.lng,
+      rawDevice.location?.lon,
+    ),
+    status: firstDefined(rawDevice.status, telemetry.status, 'UNKNOWN'),
+    solarGeneration: firstDefined(
+      rawDevice.solarGeneration,
+      rawDevice.solarGen,
+      rawDevice.solarPower,
+      telemetry.solarGeneration,
+      telemetry.solarGen,
+      telemetry.solarPower,
+      0,
+    ),
+    batteryLevel: firstDefined(
+      rawDevice.batteryLevel,
+      rawDevice.battery,
+      telemetry.batteryLevel,
+      telemetry.battery,
+      0,
+    ),
+    netGridBalance: firstDefined(
+      rawDevice.netGridBalance,
+      rawDevice.gridBalance,
+      telemetry.netGridBalance,
+      telemetry.gridBalance,
+      0,
+    ),
+    power: firstDefined(
+      rawDevice.power,
+      rawDevice.powerOutput,
+      telemetry.power,
+      telemetry.powerOutput,
+      0,
+    ),
+    updatedAt: firstDefined(
+      rawDevice.updatedAt,
+      rawDevice.timestamp,
+      telemetry.updatedAt,
+      telemetry.timestamp,
+      new Date().toISOString(),
+    ),
+  };
+}
+
+function formatNumber(value, digits = 1) {
+  return asNumber(value).toLocaleString(undefined, {
+    maximumFractionDigits: digits,
+  });
+}
+
+function StatCard({ label, value, unit, tone }) {
+  return (
+    <article className={`stat-card ${tone || ''}`}>
+      <span className="stat-card-label">{label}</span>
+      <strong className="stat-card-value">{value}</strong>
+      {unit && <small className="stat-card-unit">{unit}</small>}
+    </article>
+  );
+}
 
 export default function App() {
   const [isDarkMode, setIsDarkMode] = useState(() => {
-    const savedTheme = localStorage.getItem("app-theme");
-    return savedTheme === "dark";
+    try {
+      return localStorage.getItem('app-theme') === 'dark';
+    } catch {
+      return false;
+    }
   });
+  const [devicesById, setDevicesById] = useState(() => new Map());
+  const [connectionState, setConnectionState] = useState('connecting');
+  const [lastMessageAt, setLastMessageAt] = useState(null);
+  const pendingDevicesRef = useRef(new Map());
+  const updateTimerRef = useRef(null);
 
   useEffect(() => {
-    localStorage.setItem("app-theme", isDarkMode ? "dark" : "light");
-    if (isDarkMode) {
-      document.body.classList.add("dark-mode");
-    } else {
-      document.body.classList.remove("dark-mode");
+    document.documentElement.classList.toggle('dark', isDarkMode);
+    document.body.classList.toggle('dark', isDarkMode);
+    try {
+      localStorage.setItem('app-theme', isDarkMode ? 'dark' : 'light');
+    } catch {
+      // Storage may be unavailable in private browsing; the UI still works.
     }
   }, [isDarkMode]);
 
-  const [householdMap, setHouseholdMap] = useState({});
-  const [connected, setConnected] = useState(false);
-  const [gridSummary, setGridSummary] = useState(null);
+  const flushPendingDevices = useCallback(() => {
+    updateTimerRef.current = null;
+    const pendingDevices = pendingDevicesRef.current;
 
-  // Track the full selected device object in state for the persistent overlay card
-  const [selectedDeviceObj, setSelectedDeviceObj] = useState(null);
+    if (pendingDevices.size === 0) {
+      return;
+    }
+
+    setDevicesById((previous) => {
+      const next = new Map(previous);
+      pendingDevices.forEach((device, deviceId) => {
+        next.set(deviceId, device);
+      });
+      pendingDevices.clear();
+
+      // Keep the most recently updated records when a stream exceeds the cap.
+      if (next.size > MAX_DEVICES) {
+        const entries = Array.from(next.entries()).slice(-MAX_DEVICES);
+        return new Map(entries);
+      }
+
+      return next;
+    });
+  }, []);
+
+  const queueDeviceUpdate = useCallback((device) => {
+    if (!device?.deviceId) {
+      return;
+    }
+
+    pendingDevicesRef.current.set(device.deviceId, device);
+
+    if (!updateTimerRef.current) {
+      updateTimerRef.current = window.setTimeout(
+        flushPendingDevices,
+        UI_UPDATE_INTERVAL_MS,
+      );
+    }
+  }, [flushPendingDevices]);
 
   useEffect(() => {
-      // 1. Create a silent buffer outside of React state
-      let messageBuffer = [];
+    const client = new Client({
+      brokerURL: BROKER_URL,
+      reconnectDelay: 5000,
+      heartbeatIncoming: 10000,
+      heartbeatOutgoing: 10000,
+      debug: () => {},
 
-      const client = new Client({
-        brokerURL: "ws://localhost:8080/ws-grid",
-        reconnectDelay: 3000,
-        onConnect: () => {
-          setConnected(true);
+      onConnect: () => {
+        setConnectionState('connected');
 
-          client.subscribe("/topic/telemetry", (message) => {
-            if (!message.body) return;
-            const payload = JSON.parse(message.body);
+        client.subscribe(TELEMETRY_DESTINATION, (message) => {
+          try {
+            const parsed = JSON.parse(message.body);
+            const events = Array.isArray(parsed)
+              ? parsed
+              : Array.isArray(parsed.events)
+                ? parsed.events
+                : [parsed];
 
-            if (payload.deviceType === "BATTERY") {
-              payload.latitude += 0.0001;
-              payload.longitude += 0.0001;
-            }
-
-            // 2. Just push to the buffer. DO NOT trigger a React state update here.
-            messageBuffer.push(payload);
-          });
-
-          client.subscribe("/topic/grid-state", (message) => {
-            if (!message.body) return;
-            setGridSummary(JSON.parse(message.body));
-          });
-        },
-        onWebSocketClose: () => setConnected(false),
-        onDisconnect: () => setConnected(false),
-        onStompError: () => setConnected(false),
-      });
-
-      client.activate();
-
-      // 3. Flush the buffer into React state exactly once every 1000ms
-      const flushInterval = setInterval(() => {
-        if (messageBuffer.length === 0) return;
-
-        // Take a snapshot of the current buffer and instantly clear it
-        const currentBatch = [...messageBuffer];
-        messageBuffer = [];
-
-        setHouseholdMap((previousMap) => {
-          // Clone the map once per batch, not once per message
-          const updatedMap = { ...previousMap };
-
-          currentBatch.forEach((payload) => {
-            const houseId = payload.deviceId
-              .replace("SOLAR-", "")
-              .replace("BATT-", "");
-
-            if (!updatedMap[houseId]) {
-              updatedMap[houseId] = {
-                houseId,
-                latitude: payload.latitude,
-                longitude: payload.longitude,
-                solar: null,
-                battery: null,
-              };
-            }
-
-            if (payload.deviceType === "SOLAR_PANEL") {
-              updatedMap[houseId].solar = payload;
-            } else if (payload.deviceType === "BATTERY") {
-              updatedMap[houseId].battery = payload;
-            }
-          });
-
-          return updatedMap;
+            events.forEach((event) => {
+              const device = normalizeDevice(event);
+              if (device) {
+                queueDeviceUpdate(device);
+                setLastMessageAt(Date.now());
+              }
+            });
+          } catch (error) {
+            console.error('Invalid telemetry message:', error);
+          }
         });
-      }, 1000); // UI updates only once per second
+      },
 
-      return () => {
-        clearInterval(flushInterval);
-        client.deactivate();
+      onWebSocketClose: () => {
+        setConnectionState('disconnected');
+      },
+
+      onWebSocketError: () => {
+        setConnectionState('disconnected');
+      },
+
+      onStompError: () => {
+        setConnectionState('disconnected');
+      },
+    });
+
+    setConnectionState('connecting');
+    client.activate();
+
+    return () => {
+      if (updateTimerRef.current) {
+        window.clearTimeout(updateTimerRef.current);
+      }
+      pendingDevicesRef.current.clear();
+      client.deactivate();
+    };
+  }, [queueDeviceUpdate]);
+
+  const devices = useMemo(() => Array.from(devicesById.values()), [devicesById]);
+
+  const stats = useMemo(() => {
+    if (devices.length === 0) {
+      return {
+        netGridBalance: 0,
+        totalSolarGeneration: 0,
+        averageBatteryLevel: 0,
+        onlineDevices: 0,
       };
+    }
 
-    }, []);
-useEffect(() => {
-               // 1. Create a silent buffer outside of React state
-               let messageBuffer = [];
+    const totalSolarGeneration = devices.reduce(
+      (sum, device) => sum + asNumber(device.solarGeneration),
+      0,
+    );
+    const netGridBalance = devices.reduce(
+      (sum, device) => sum + asNumber(device.netGridBalance),
+      0,
+    );
+    const averageBatteryLevel = devices.reduce(
+      (sum, device) => sum + asNumber(device.batteryLevel),
+      0,
+    ) / devices.length;
+    const onlineDevices = devices.filter((device) =>
+      ['ONLINE', 'ACTIVE', 'CONNECTED', 'OK'].includes(
+        String(device.status).toUpperCase(),
+      ),
+    ).length;
 
-               const client = new Client({
-                 brokerURL: "ws://localhost:8080/ws-grid",
-                 reconnectDelay: 3000,
-                 onConnect: () => {
-                   setConnected(true);
+    return {
+      netGridBalance,
+      totalSolarGeneration,
+      averageBatteryLevel,
+      onlineDevices,
+    };
+  }, [devices]);
 
-                   client.subscribe("/topic/telemetry", (message) => {
-                     if (!message.body) return;
-                     const payload = JSON.parse(message.body);
-
-                     if (payload.deviceType === "BATTERY") {
-                       payload.latitude += 0.0001;
-                       payload.longitude += 0.0001;
-                     }
-
-                     // 2. Just push to the buffer. DO NOT trigger a React state update here.
-                     messageBuffer.push(payload);
-                   });
-
-                   client.subscribe("/topic/grid-state", (message) => {
-                     if (!message.body) return;
-                     setGridSummary(JSON.parse(message.body));
-                   });
-                 },
-                 onWebSocketClose: () => setConnected(false),
-                 onDisconnect: () => setConnected(false),
-                 onStompError: () => setConnected(false),
-               });
-
-               client.activate();
-
-               // 3. Flush the buffer into React state exactly once every 1000ms
-               const flushInterval = setInterval(() => {
-                 if (messageBuffer.length === 0) return;
-
-                 // Take a snapshot of the current buffer and instantly clear it
-                 const currentBatch = [...messageBuffer];
-                 messageBuffer = [];
-
-                 setHouseholdMap((previousMap) => {
-                   // Clone the map once per batch, not once per message
-                   const updatedMap = { ...previousMap };
-
-                   currentBatch.forEach((payload) => {
-                     const houseId = payload.deviceId
-                       .replace("SOLAR-", "")
-                       .replace("BATT-", "");
-
-                     if (!updatedMap[houseId]) {
-                       updatedMap[houseId] = {
-                         houseId,
-                         latitude: payload.latitude,
-                         longitude: payload.longitude,
-                         solar: null,
-                         battery: null,
-                       };
-                     }
-
-                     if (payload.deviceType === "SOLAR_PANEL") {
-                       updatedMap[houseId].solar = payload;
-                     } else if (payload.deviceType === "BATTERY") {
-                       updatedMap[houseId].battery = payload;
-                     }
-                   });
-
-                   return updatedMap;
-                 });
-               }, 1000); // UI updates only once per second
-
-               return () => {
-                 clearInterval(flushInterval);
-                 client.deactivate();
-               };
-             }, []);
-
-  const households = Object.values(householdMap);
-
-  const totalSolarWatts = households.reduce(
-    (sum, house) => sum + (house.solar ? house.solar.outputWatts : 0),
-    0,
-  );
-
-  const totalBatteryWatts = households.reduce(
-    (sum, house) => sum + (house.battery ? house.battery.outputWatts : 0),
-    0,
-  );
-
-  const liveTelemetry = households.flatMap((house) =>
-    [house.solar, house.battery].filter(Boolean),
-  );
-
-  const mapTelemetry = liveTelemetry.length > 0 ? liveTelemetry : mockTelemetry;
-
-  // Continuously bind the selected device to the live telemetry stream so values tick live
-  const activeSelectedDevice = selectedDeviceObj
-    ? mapTelemetry.find(t => t.deviceId === selectedDeviceObj.deviceId) || selectedDeviceObj
-    : null;
+  const connectionLabel = connectionState === 'connected'
+    ? 'Live stream connected'
+    : connectionState === 'connecting'
+      ? 'Connecting to live stream…'
+      : 'Live stream disconnected';
 
   return (
-    <div className="dashboard-container">
-      <header className="dashboard-header">
+    <div className={`app-shell ${isDarkMode ? 'dark' : ''}`}>
+      <header className="app-header">
         <div>
-          <h1>GridWeaver Microgrid Control Tower</h1>
-          <p className="subtitle">Real-time Maharashtra Household Energy Matrix</p>
+          <p className="app-eyebrow">GRIDWEAVER IOT MICROGRID</p>
+          <h1>Maharashtra Energy Dashboard</h1>
+          <p className="app-subtitle">
+            High-performance live GIS monitoring for {devices.length.toLocaleString()} devices.
+          </p>
         </div>
-
-        <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-          <button
-            className="theme-toggle-btn"
-            onClick={() => setIsDarkMode(!isDarkMode)}
-          >
-            {isDarkMode ? "☀️ Light" : "🌙 Dark"}
-          </button>
-
-          <div className={`status-badge ${connected ? "online" : "offline"}`}>
-            {connected ? "● LIVE STREAM CONNECTED" : "○ DISCONNECTED"}
-          </div>
-        </div>
+        <button
+          type="button"
+          className="theme-toggle"
+          onClick={() => setIsDarkMode((current) => !current)}
+          aria-label={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+        >
+          {isDarkMode ? 'Light mode' : 'Dark mode'}
+        </button>
       </header>
 
-      <div className="stats-grid">
-        <div className="stat-card">
-          <h3>Net Grid Balance</h3>
-          <p className="stat-value" style={{ color: gridSummary && gridSummary.netGridBalanceKw >= 0 ? '#10b981' : '#ef4444' }}>
-            {gridSummary ? `${gridSummary.netGridBalanceKw.toFixed(1)} kW` : 'Loading...'}
-          </p>
-        </div>
-        <div className="stat-card">
-          <h3>Total Solar Generation</h3>
-          <p className="stat-value watts">
-            {gridSummary ? `${gridSummary.totalSolarGenerationKw.toFixed(1)} kW` : `${totalSolarWatts.toFixed(1)} W`}
-          </p>
-        </div>
-        <div className="stat-card">
-          <h3>Total Battery Demand</h3>
-          <p className="stat-value battery">
-            {gridSummary ? `${gridSummary.totalBatteryDemandKw.toFixed(1)} kW` : `${totalBatteryWatts.toFixed(1)} W`}
-          </p>
-        </div>
-        <div className="stat-card">
-          <h3>Avg Battery Level</h3>
-          <p className="stat-value">
-            {gridSummary ? `${gridSummary.averageBatterySocPercentage.toFixed(1)}%` : 'Loading...'}
-          </p>
-        </div>
-      </div>
-
-      <section
-        style={{
-          position: "relative",
-          margin: "24px 0",
-          padding: "16px",
-          background: isDarkMode ? "#1e293b" : "#ffffff",
-          border: `1px solid ${isDarkMode ? "#334155" : "#e2e8f0"}`,
-          borderRadius: "12px",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            gap: "16px",
-            marginBottom: "14px",
-          }}
-        >
-          <div>
-            <h2 style={{ margin: 0 }}>Maharashtra GIS Device Map</h2>
-            <p style={{ margin: "6px 0 0", color: "#64748b" }}>
-              {liveTelemetry.length > 0
-                ? "Showing live telemetry from the backend"
-                : "Showing static Week 1 preview data"}
-            </p>
-          </div>
-          <strong style={{ color: connected ? "#10b981" : "#64748b" }}>
-            {mapTelemetry.length} devices
-          </strong>
-        </div>
-
-        {/* Map Container Wrapper with Decoupled Floating Card Overlay */}
-        <div style={{ position: "relative", width: "100%", height: "580px" }}>
-          <GridMap
-            telemetry={mapTelemetry}
-            onDeviceSelect={(device) => setSelectedDeviceObj(device)}
-          />
-
-          {/* Bulletproof Floating Details Card */}
-          {activeSelectedDevice && (
-            <div
-              style={{
-                position: "absolute",
-                top: "16px",
-                right: "16px",
-                zIndex: 3000,
-                minWidth: "260px",
-                background: isDarkMode ? "#0f172a" : "#ffffff",
-                color: isDarkMode ? "#f8fafc" : "#0f172a",
-                border: `1px solid ${isDarkMode ? "#334155" : "#cbd5e1"}`,
-                borderRadius: "10px",
-                padding: "16px",
-                boxShadow: "0 10px 25px rgba(0,0,0,0.3)",
-                fontFamily: "Arial, sans-serif",
-              }}
-            >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                <strong style={{ fontFamily: "monospace", fontSize: "14px" }}>
-                  {activeSelectedDevice.deviceId}
-                </strong>
-                <button
-                  onClick={() => setSelectedDeviceObj(null)}
-                  style={{
-                    background: "none",
-                    border: "none",
-                    color: "inherit",
-                    cursor: "pointer",
-                    fontSize: "16px",
-                    fontWeight: "bold",
-                  }}
-                >
-                  ✕
-                </button>
-              </div>
-
-              <div style={{ fontSize: "13px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 10px" }}>
-                <span style={{ color: "#64748b" }}>Status:</span>
-                <span style={{ fontWeight: 700, color: statusColors[activeSelectedDevice.status] || "#06b6d4" }}>
-                  {activeSelectedDevice.status}
-                </span>
-
-                <span style={{ color: "#64748b" }}>Output:</span>
-                <span>{(Number(activeSelectedDevice.outputWatts || 0) / 1000).toFixed(1)} kW</span>
-
-                <span style={{ color: "#64748b" }}>Battery:</span>
-                <span>{Number(activeSelectedDevice.batteryLevelPct || 0).toFixed(1)}%</span>
-              </div>
-            </div>
+      <main className="dashboard-content">
+        <div className={`connection-banner ${connectionState}`}>
+          <span className="status-dot" />
+          <span>{connectionLabel}</span>
+          {lastMessageAt && (
+            <span className="last-message">
+              Last event: {new Date(lastMessageAt).toLocaleTimeString()}
+            </span>
           )}
         </div>
-      </section>
+
+        <section className="stats-grid" aria-label="Grid statistics">
+          <StatCard
+            label="Net Grid Balance"
+            value={formatNumber(stats.netGridBalance)}
+            unit="kW"
+            tone="blue"
+          />
+          <StatCard
+            label="Total Solar Generation"
+            value={formatNumber(stats.totalSolarGeneration)}
+            unit="kW"
+            tone="orange"
+          />
+          <StatCard
+            label="Avg Battery Level"
+            value={formatNumber(stats.averageBatteryLevel)}
+            unit="%"
+            tone="green"
+          />
+          <StatCard
+            label="Online Devices"
+            value={stats.onlineDevices.toLocaleString()}
+            unit={`of ${devices.length.toLocaleString()}`}
+            tone="purple"
+          />
+        </section>
+
+        <GridMap devices={devices} />
+      </main>
     </div>
   );
 }
