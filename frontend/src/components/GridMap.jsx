@@ -13,7 +13,7 @@ const MAHARASHTRA_BOUNDS = [
   [22.2, 81.5],
 ];
 
-const mapCanvasRenderer = L.canvas({ padding: 0.5 });
+const canvasRenderer = L.canvas({ padding: 0.5 });
 
 function firstDefined(...values) {
   return values.find(
@@ -59,17 +59,26 @@ function getHeatWeight(device) {
       telemetry.powerOutput,
       telemetry.solarGeneration,
       telemetry.solarPower,
-      0,
+      1,
     ),
   );
 
-  return Number.isFinite(value) ? Math.max(0, Math.min(value / 100, 1)) : 0.1;
+  if (!Number.isFinite(value)) {
+    return 0.1;
+  }
+
+  return Math.max(0.05, Math.min(value / 100, 1));
 }
 
 function HeatmapLayer({ devices }) {
   const map = useMap();
 
   useEffect(() => {
+    if (!L.heatLayer) {
+      console.error('leaflet.heat did not load correctly.');
+      return undefined;
+    }
+
     const points = devices
       .map((device) => {
         const { latitude, longitude } = getCoordinates(device);
@@ -84,12 +93,12 @@ function HeatmapLayer({ devices }) {
       radius: 28,
       blur: 22,
       maxZoom: 13,
-      minOpacity: 0.28,
+      minOpacity: 0.3,
       gradient: {
         0.2: '#2563eb',
         0.45: '#22c55e',
         0.7: '#facc15',
-        1.0: '#ef4444',
+        1: '#ef4444',
       },
     }).addTo(map);
 
@@ -105,6 +114,7 @@ export default function GridMap({ devices = [], telemetry = [] }) {
   const inputDevices = Array.isArray(devices) && devices.length > 0
     ? devices
     : telemetry;
+
   const safeDevices = Array.isArray(inputDevices)
     ? inputDevices.filter((device) => device && typeof device === 'object')
     : Object.values(inputDevices || {}).filter(
@@ -143,7 +153,7 @@ export default function GridMap({ devices = [], telemetry = [] }) {
           preferCanvas
           zoomAnimation={false}
           markerZoomAnimation={false}
-          renderer={mapCanvasRenderer}
+          renderer={canvasRenderer}
           style={{ width: '100%', height: '100%', minHeight: '540px' }}
         >
           <TileLayer
@@ -167,7 +177,7 @@ export default function GridMap({ devices = [], telemetry = [] }) {
             spiderfyOnMaxZoom
             zoomToBoundsOnClick
           >
-            {safeDevices.map((device, index ) => (
+            {safeDevices.map((device, index) => (
               <DeviceMarker
                 key={device.deviceId || device.id || `device-${index}`}
                 device={device}
