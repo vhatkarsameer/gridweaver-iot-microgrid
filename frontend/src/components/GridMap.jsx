@@ -1,22 +1,32 @@
-import { MapContainer, TileLayer } from "react-leaflet";
+import { useEffect } from "react";
+import { MapContainer, TileLayer, useMap } from "react-leaflet";
 import MarkerClusterGroup from "react-leaflet-cluster";
 import "leaflet/dist/leaflet.css";
+import HouseholdMarker from "./HouseholdMarker.jsx";
 
-import DeviceMarker from "./DeviceMarker.jsx";
-import { mockTelemetry } from "../data/mockTelemetry.js";
+const MAHARASHTRA_CENTER = [19.0, 77.0];
 
-const MUMBAI_CENTER = [19.076, 72.8777];
+// 1. Controller component to handle the flight animation
+function MapFlyTo({ activeHouse }) {
+  const map = useMap();
 
-export default function GridMap({ telemetry, onDeviceSelect }) {
-  const devices = Array.isArray(telemetry) && telemetry.length > 0
-    ? telemetry
-    : mockTelemetry;
+  useEffect(() => {
+    if (activeHouse) {
+      // Fly to the coordinates with a smooth animation and zoom level 16
+      map.flyTo([activeHouse.latitude, activeHouse.longitude], 16, {
+        animate: true,
+        duration: 1.5,
+      });
+    }
+  }, [activeHouse, map]);
 
-  const isUsingMock = !telemetry || telemetry.length === 0 || telemetry === mockTelemetry;
+  return null;
+}
 
+export default function GridMap({ households, onHouseSelect, activeHouse }) {
   return (
     <section
-      aria-label="Mumbai microgrid map"
+      aria-label="Maharashtra microgrid map"
       style={{
         position: "relative",
         width: "100%",
@@ -28,85 +38,37 @@ export default function GridMap({ telemetry, onDeviceSelect }) {
       }}
     >
       <MapContainer
-        center={MUMBAI_CENTER}
-        zoom={11}
-        minZoom={9}
+        center={MAHARASHTRA_CENTER}
+        zoom={7}
+        minZoom={6}
         maxZoom={18}
         scrollWheelZoom={true}
+        preferCanvas={true}
         style={{ width: "100%", height: "100%", minHeight: "540px" }}
       >
+        {/* 2. Mount the flight controller inside the map */}
+        <MapFlyTo activeHouse={activeHouse} />
+
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
 
-        <MarkerClusterGroup chunkedLoading maxClusterRadius={60}>
-          {devices.map((device) => (
-            <DeviceMarker
-              key={device.deviceId}
-              telemetry={device}
-              onSelect={onDeviceSelect}
+        <MarkerClusterGroup
+          chunkedLoading={true}
+          maxClusterRadius={60}
+          animate={false}
+          spiderfyOnMaxZoom={false}
+        >
+          {households.map((house) => (
+            <HouseholdMarker
+              key={house.houseId}
+              household={house}
+              onSelect={onHouseSelect}
             />
           ))}
         </MarkerClusterGroup>
       </MapContainer>
-
-      {/* GIS Legend */}
-      <div
-        style={{
-          position: "absolute",
-          bottom: "24px",
-          right: "24px",
-          zIndex: 1000,
-          background: "rgba(255, 255, 255, 0.95)",
-          backdropFilter: "blur(8px)",
-          border: "1px solid #cbd5e1",
-          borderRadius: "10px",
-          padding: "14px 16px",
-          boxShadow: "0 10px 25px rgba(15, 23, 42, 0.15)",
-          fontFamily: "Arial, sans-serif",
-          fontSize: "12px",
-          color: "#0f172a",
-          maxWidth: "240px",
-          pointerEvents: "none",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: "10px",
-            borderBottom: "1px solid #e2e8f0",
-            paddingBottom: "6px",
-          }}
-        >
-          <strong style={{ fontSize: "13px" }}>Mumbai Microgrid Legend</strong>
-          <span
-            style={{
-              fontSize: "10px",
-              padding: "2px 6px",
-              borderRadius: "4px",
-              fontWeight: 700,
-              background: isUsingMock ? "#fef3c7" : "#d1fae5",
-              color: isUsingMock ? "#d97706" : "#059669",
-            }}
-          >
-            {isUsingMock ? "WEEK 1 MOCK" : "LIVE STOMP"}
-          </span>
-        </div>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <span style={{ fontSize: "14px" }}>☀️</span>
-            <span>Solar Array (Active)</span>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <span style={{ fontSize: "14px" }}>▣</span>
-            <span>Home Battery Storage</span>
-          </div>
-        </div>
-      </div>
     </section>
   );
 }

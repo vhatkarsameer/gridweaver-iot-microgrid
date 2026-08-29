@@ -46,8 +46,7 @@ public class IotSimulatorService {
     public void start10000ConcurrentDeviceVirtualThreads() {
         Random random = new Random();
 
-        // 1. Generate 5,000 fixed household locations centered in Maharashtra
-        for (int i = 0; i < 5000; i++) {
+        for (int i = 0; i < 25000; i++) {
             String houseId = "HOUSE-MH-" + (1000 + i);
             double lat = 17.0 + (21.0 - 17.0) * random.nextDouble();
             double lng = 74.0 + (80.0 - 74.0) * random.nextDouble();

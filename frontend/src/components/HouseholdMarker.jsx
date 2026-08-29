@@ -3,11 +3,9 @@ import { Marker } from "react-leaflet";
 import L from "leaflet";
 
 export default function HouseholdMarker({ household, onSelect }) {
-  // Determine overall household health
   const hasFault = household.solar?.status === "FAULT" || household.battery?.status === "FAULT";
   const isGenerating = household.solar?.outputWatts > 0;
 
-  // Blue for idle, Green for generating, Red for fault
   const color = hasFault ? "#ef4444" : (isGenerating ? "#10b981" : "#3b82f6");
 
   const markerIcon = useMemo(
@@ -36,7 +34,7 @@ export default function HouseholdMarker({ household, onSelect }) {
         iconSize: [32, 32],
         iconAnchor: [16, 16],
       }),
-    [color] // Only rebuild DOM marker if color/status changes!
+    [color]
   );
 
   return (
@@ -47,7 +45,7 @@ export default function HouseholdMarker({ household, onSelect }) {
         click: (e) => {
           e.originalEvent?.stopPropagation?.();
           if (onSelect) {
-            onSelect(household.houseId); // Pass the ID, not the whole object
+            onSelect(household.houseId);
           }
         },
       }}
