@@ -34,15 +34,15 @@ public class GridStateMapper {
                 .average()
                 .orElse(0.0);
 
-        double netBalanceWatts = totalSolarWatts - totalBatteryWatts;
+        double netBalanceWatts = totalSolarWatts + totalBatteryWatts;
 
         return new GridStateSummary(
                 Instant.now(),
                 totalHouseholdsDevices,
                 activeDevices,
-                round(totalBatteryWatts),
-                round(totalBatteryWatts),
-                round(netBalanceWatts),
+                round(totalSolarWatts / 1000.0),   // Converted to kW
+                round(totalBatteryWatts / 1000.0), // Converted to kW
+                round(netBalanceWatts / 1000.0),   // Converted to kW
                 round(averageBatteryLevelPct)
         );
     }
