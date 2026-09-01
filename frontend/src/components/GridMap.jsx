@@ -1,7 +1,7 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { MapContainer, TileLayer, useMap } from 'react-leaflet';
-import L from 'leaflet';
 import MarkerClusterGroup from 'react-leaflet-cluster';
+import L from 'leaflet';
 import DeviceMarker from './DeviceMarker.jsx';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet.heat';
@@ -13,130 +13,101 @@ const MAHARASHTRA_BOUNDS = [
   [22.2, 81.5],
 ];
 
-const canvasRenderer = L.canvas({ padding: 0.5 });
-
-function firstDefined(...values) {
-  return values.find(
-    (value) => value !== undefined && value !== null && value !== '',
-  );
-}
-
-function getCoordinates(device) {
-  const latitude = Number(
-    firstDefined(
-      device.latitude,
-      device.lat,
-      device.location?.latitude,
-      device.location?.lat,
-    ),
-  );
-  const longitude = Number(
-    firstDefined(
-      device.longitude,
-      device.lng,
-      device.lon,
-      device.location?.longitude,
-      device.location?.lng,
-      device.location?.lon,
-    ),
-  );
-
-  return { latitude, longitude };
-}
-
-function getHeatWeight(device) {
-  const telemetry = device.telemetry && typeof device.telemetry === 'object'
-    ? device.telemetry
-    : {};
-
-  const value = Number(
-    firstDefined(
-      device.power,
-      device.powerOutput,
-      device.solarGeneration,
-      device.solarPower,
-      telemetry.power,
-      telemetry.powerOutput,
-      telemetry.solarGeneration,
-      telemetry.solarPower,
-      1,
-    ),
-  );
-
-  if (!Number.isFinite(value)) {
-    return 0.1;
+function numberFrom(...values) {
+  for (const value of values) {
+    const number = Number(value);
+    if (Number.isFinite(number)) return number;
   }
-
-  return Math.max(0.05, Math.min(value / 100, 1));
+  return 0;
 }
 
 function HeatmapLayer({ devices }) {
   const map = useMap();
+  const heatPoints = useMemo(
+    () =>
+      devices
+        .map((device) => {
+          const latitude = numberFrom(
+            device.latitude,
+            device.lat,
+            device.location?.latitude,
+            device.location?.lat,
+          );
+          const longitude = numberFrom(
+            device.longitude,
+            device.lng,
+            device.lon,
+            device.location?.longitude,
+            device.location?.lng,
+            device.location?.lon,
+          );
+          const intensity = Math.min(
+            1,
+            Math.max(
+              0.15,
+              numberFrom(
+                device.heatIntensity,
+                device.outputWatts,
+                device.power,
+                device.solarGeneration,
+                1,
+              ) / 1000,
+            ),
+          );
+
+          return [latitude, longitude, intensity];
+        })
+        .filter(
+          ([latitude, longitude]) =>
+            latitude >= -90 && latitude <= 90 && longitude >= -180 && longitude <= 180,
+        ),
+    [devices],
+  );
 
   useEffect(() => {
-    if (!L.heatLayer) {
-      console.error('leaflet.heat did not load correctly.');
+    if (!map || heatPoints.length === 0 || typeof L.heatLayer !== 'function') {
       return undefined;
     }
 
-    const points = devices
-      .map((device) => {
-        const { latitude, longitude } = getCoordinates(device);
-        if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-          return null;
-        }
-        return [latitude, longitude, getHeatWeight(device)];
-      })
-      .filter(Boolean);
-
-    const heatLayer = L.heatLayer(points, {
-      radius: 28,
+    const heatLayer = L.heatLayer(heatPoints, {
+      radius: 30,
       blur: 22,
-      maxZoom: 13,
-      minOpacity: 0.3,
+      maxZoom: 12,
+      minOpacity: 0.35,
       gradient: {
-        0.2: '#2563eb',
-        0.45: '#22c55e',
-        0.7: '#facc15',
-        1: '#ef4444',
+        0.15: '#2563eb',
+        0.35: '#06b6d4',
+        0.55: '#22c55e',
+        0.75: '#facc15',
+        1.0: '#ef4444',
       },
-    }).addTo(map);
+    });
 
+    heatLayer.addTo(map);
     return () => {
       map.removeLayer(heatLayer);
     };
-  }, [devices, map]);
+  }, [map, heatPoints]);
 
   return null;
 }
 
 export default function GridMap({ devices = [], telemetry = [] }) {
-  const inputDevices = Array.isArray(devices) && devices.length > 0
-    ? devices
-    : telemetry;
-
+  const inputDevices = devices.length > 0 ? devices : telemetry;
   const safeDevices = Array.isArray(inputDevices)
     ? inputDevices.filter((device) => device && typeof device === 'object')
-    : Object.values(inputDevices || {}).filter(
-      (device) => device && typeof device === 'object',
-    );
+    : Object.values(inputDevices || {}).filter((device) => device && typeof device === 'object');
 
   return (
-    <section
-      className="grid-map-shell"
-      aria-label="Maharashtra high-performance live GIS map"
-    >
+    <section className="grid-map-shell" aria-label="Maharashtra live microgrid map">
       <div className="grid-map-toolbar">
         <div>
           <p className="grid-map-eyebrow">WEEK 3 GIS PERFORMANCE VIEW</p>
           <h2>Maharashtra device network</h2>
-          <p className="grid-map-description">
-            Heatmap and clustered telemetry rendering for high-volume device data.
-          </p>
+          <p className="grid-map-help">Heatmap intensity and clustered device markers for high-volume telemetry.</p>
         </div>
         <span className="grid-map-count">
-          {safeDevices.length.toLocaleString()}{' '}
-          {safeDevices.length === 1 ? 'device' : 'devices'}
+          {safeDevices.length.toLocaleString()} {safeDevices.length === 1 ? 'device' : 'devices'}
         </span>
       </div>
 
@@ -153,7 +124,6 @@ export default function GridMap({ devices = [], telemetry = [] }) {
           preferCanvas
           zoomAnimation={false}
           markerZoomAnimation={false}
-          renderer={canvasRenderer}
           style={{ width: '100%', height: '100%', minHeight: '540px' }}
         >
           <TileLayer
@@ -174,12 +144,10 @@ export default function GridMap({ devices = [], telemetry = [] }) {
             animate={false}
             showCoverageOnHover={false}
             maxClusterRadius={60}
-            spiderfyOnMaxZoom
-            zoomToBoundsOnClick
           >
             {safeDevices.map((device, index) => (
               <DeviceMarker
-                key={device.deviceId || device.id || `device-${index}`}
+                key={device.deviceId ?? device.id ?? `device-${index}`}
                 device={device}
               />
             ))}
