@@ -2,33 +2,23 @@ import { useMemo } from "react";
 import { Marker } from "react-leaflet";
 import L from "leaflet";
 
-const statusColors = {
-  IDLE: "#64748b",
-  CHARGING: "#06b6d4",
-  DISCHARGING: "#f59e0b",
-  FAULT: "#ef4444",
-};
+export default function HouseholdMarker({ household, onSelect }) {
+  // Determine overall household health
+  const hasFault = household.solar?.status === "FAULT" || household.battery?.status === "FAULT";
+  const isGenerating = household.solar?.outputWatts > 0;
 
-const deviceSymbols = {
-  SOLAR: "☀️",
-  SOLAR_PANEL: "☀️",
-  BATTERY: "▣",
-  GRID: "⚡",
-};
-
-export default function DeviceMarker({ telemetry, onSelect }) {
-  const color = statusColors[telemetry.status] || "#64748b";
-  const symbol = deviceSymbols[telemetry.deviceType] || "•";
+  // Blue for idle, Green for generating, Red for fault
+  const color = hasFault ? "#ef4444" : (isGenerating ? "#10b981" : "#3b82f6");
 
   const markerIcon = useMemo(
     () =>
       L.divIcon({
-        className: "gridweaver-device-marker",
+        className: "gridweaver-house-marker",
         html: `
           <div
             style="
-              width: 36px;
-              height: 36px;
+              width: 32px;
+              height: 32px;
               display: flex;
               align-items: center;
               justify-content: center;
@@ -36,30 +26,28 @@ export default function DeviceMarker({ telemetry, onSelect }) {
               background: ${color};
               border: 3px solid #ffffff;
               color: #ffffff;
-              font-size: 17px;
-              font-weight: 700;
-              box-shadow: 0 0 0 5px ${color}33, 0 4px 12px rgba(15, 23, 42, 0.28);
+              font-size: 16px;
+              box-shadow: 0 0 0 4px ${color}33, 0 4px 10px rgba(15, 23, 42, 0.25);
             "
           >
-            ${symbol}
+            🏠
           </div>
         `,
-        iconSize: [36, 36],
-        iconAnchor: [18, 18],
+        iconSize: [32, 32],
+        iconAnchor: [16, 16],
       }),
-    [color, symbol],
+    [color] // Only rebuild DOM marker if color/status changes!
   );
 
   return (
     <Marker
-      position={[telemetry.latitude, telemetry.longitude]}
+      position={[household.latitude, household.longitude]}
       icon={markerIcon}
       eventHandlers={{
         click: (e) => {
-          // Prevent map click propagation and pass full telemetry up
           e.originalEvent?.stopPropagation?.();
           if (onSelect) {
-            onSelect(telemetry);
+            onSelect(household.houseId); // Pass the ID, not the whole object
           }
         },
       }}
