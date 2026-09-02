@@ -22,9 +22,6 @@ public class DeviceStateProcessor {
         this.stateMachineFactory = stateMachineFactory;
     }
 
-    /**
-     * Takes the raw telemetry, fires the appropriate event, and returns the new state.
-     */
     public DeviceStatus processAndGetState(TelemetryPayload payload) {
         // 1. Fetch or create the state machine for this specific device
         StateMachine<DeviceStatus, DeviceEvent> sm = machineCache.computeIfAbsent(payload.deviceId(), id -> {

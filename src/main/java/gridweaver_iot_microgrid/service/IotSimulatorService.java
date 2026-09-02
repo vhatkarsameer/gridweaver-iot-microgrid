@@ -19,7 +19,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 @Service
-// Allow disabling the 10,000 thread simulator in test profiles if needed
 @ConditionalOnProperty(name = "iot.simulator.enabled", havingValue = "true", matchIfMissing = true)
 public class IotSimulatorService {
 
@@ -38,12 +37,9 @@ public class IotSimulatorService {
         this.stateProcessor = stateProcessor;
     }
 
-    /**
-     * Initializes 5,000 fixed Household locations across Maharashtra upon application startup,
-     * then spawns 10,000 concurrent Virtual Threads (1 Solar + 1 Battery per Household).
-     */
+
     @EventListener(ApplicationReadyEvent.class)
-    public void start10000ConcurrentDeviceVirtualThreads() {
+    public void startConcurrentDeviceVirtualThreads() {
         Random random = new Random();
 
         for (int i = 0; i < 25000; i++) {
@@ -64,7 +60,7 @@ public class IotSimulatorService {
             executor.submit(() -> runVirtualDeviceLoop(batteryId, house, DeviceType.BATTERY));
         }
 
-        System.out.println("🚀 [JAVA 21 VIRTUAL THREADS] Successfully spawned 10,000 concurrent tasks across 5,000 fixed Households!");
+        System.out.println("🚀 [JAVA 21 VIRTUAL THREADS] Successfully spawned 50,000 concurrent tasks across 25,000 fixed Households!");
     }
 
     private void runVirtualDeviceLoop(String deviceId, HouseholdLocation house, DeviceType deviceType) {
