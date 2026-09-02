@@ -1,9 +1,6 @@
 package gridweaver_iot_microgrid.service;
 
-import gridweaver_iot_microgrid.model.DeviceStatus;
-import gridweaver_iot_microgrid.model.DeviceType;
-import gridweaver_iot_microgrid.model.HouseholdLocation;
-import gridweaver_iot_microgrid.model.TelemetryPayload;
+import gridweaver_iot_microgrid.model.*;
 import jakarta.annotation.PreDestroy;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
@@ -13,9 +10,11 @@ import org.springframework.stereotype.Service;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.stream.Collectors;
 
 @Service
 @ConditionalOnProperty(name = "iot.simulator.enabled", havingValue = "true", matchIfMissing = true)
@@ -52,6 +51,14 @@ public class IotSimulatorService {
         }
 
         System.out.println("🚀 [JAVA 21 VIRTUAL THREADS] Successfully spawned 50,000 concurrent tasks across 5,000 fixed Households!");
+    }
+
+    public Map<DeviceType, Double> computePowerByDeviceType(List<TelemetryPayload> activeTelemetry) {
+        return activeTelemetry.stream()
+                .collect(Collectors.groupingBy(
+                        TelemetryPayload::deviceType, // Group by the device type record accessor
+                        Collectors.summingDouble(TelemetryPayload::outputWatts) // Sum up output watts for each group
+                ));
     }
 
     private void runVirtualDeviceLoop(String deviceId, HouseholdLocation house, DeviceType deviceType) {
