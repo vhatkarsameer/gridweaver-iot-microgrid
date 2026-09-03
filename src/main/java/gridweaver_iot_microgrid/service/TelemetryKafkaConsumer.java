@@ -19,21 +19,20 @@ public class TelemetryKafkaConsumer {
         this.stateProcessor = stateProcessor;
     }
 
-    @KafkaListener(topics = "telemetry-events", groupId = "gridweaver-group")
+    @KafkaListener(topics = "telemetry-events-v2", groupId = "gridweaver-group-v2")
     public void consumeTelemetry(TelemetryPayload payload) {
+        // 1. Calculate actual live grid load
+        double currentLoad = gridStateEngine.getCurrentGridLoadPercentage();
 
-        DeviceStatus evaluatedStatus = stateProcessor.processAndGetState(payload);
+        // 2. Evaluate state using the 80% rule
+        DeviceStatus evaluatedStatus = stateProcessor.processAndGetState(payload, currentLoad);
 
         TelemetryPayload processedPayload = new TelemetryPayload(
-                payload.deviceId(),
-                payload.deviceType(),
-                evaluatedStatus,
-                payload.outputWatts(),
-                payload.batteryLevelPct(),
-                payload.latitude(),
-                payload.longitude(),
-                payload.timestamp()
+                payload.deviceId(), payload.deviceType(), evaluatedStatus,
+                payload.outputWatts(), payload.batteryLevelPct(),
+                payload.latitude(), payload.longitude(), payload.timestamp()
         );
+
         gridStateEngine.ingestTelemetry(processedPayload);
         messagingTemplate.convertAndSend("/topic/telemetry", processedPayload);
     }

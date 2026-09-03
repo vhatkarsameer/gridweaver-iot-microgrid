@@ -9,10 +9,10 @@ import java.util.Collection;
 
 public class GridStateMapper {
 
-    public static GridStateSummary toGridStateSummary(Collection<TelemetryPayload> payloads) {
+    public static GridStateSummary toGridStateSummary(Collection<TelemetryPayload> payloads, double currentGridLoad) {
 
         if(payloads == null || payloads.isEmpty()) {
-            return new GridStateSummary(Instant.now(), 0, 0, 0.0, 0.0, 0.0, 0.0);
+            return new GridStateSummary(Instant.now(), 0, 0, 0.0, 0.0, 0.0, 0.0, 0.0);
         }
 
         int activeDevices = payloads.size();
@@ -43,7 +43,8 @@ public class GridStateMapper {
                 round(totalSolarWatts/1000.0),
                 round(totalBatteryWatts/1000.0),
                 round(netBalanceWatts/1000.0),
-                round(averageBatteryLevelPct)
+                round(averageBatteryLevelPct),
+                round(currentGridLoad)
         );
     }
 

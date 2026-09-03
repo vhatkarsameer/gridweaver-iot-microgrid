@@ -71,25 +71,16 @@ public class IotSimulatorService {
                 TelemetryPayload payload;
                 if (deviceType == DeviceType.SOLAR_PANEL) {
                     payload = new TelemetryPayload(
-                            deviceId,
-                            DeviceType.SOLAR_PANEL,
-                            DeviceStatus.IDLE,
-                            random.nextDouble(80.0, 200.0),
-                            0.0,
-                            house.latitude(),
-                            house.longitude(),
-                            Instant.now()
+                            deviceId, DeviceType.SOLAR_PANEL, DeviceStatus.IDLE,
+                            random.nextDouble(2500.0, 5000.0), // FIX: Realistic 2.5kW to 5kW solar generation
+                            0.0, house.latitude(), house.longitude(), Instant.now()
                     );
                 } else {
                     payload = new TelemetryPayload(
-                            deviceId,
-                            DeviceType.BATTERY,
-                            DeviceStatus.IDLE,
-                            random.nextDouble(1500.0, 2500.0),
+                            deviceId, DeviceType.BATTERY, DeviceStatus.IDLE,
+                            random.nextDouble(500.0, 2000.0),  // FIX: Lowered battery baseline demand
                             random.nextDouble(40.0, 90.0),
-                            house.latitude(),
-                            house.longitude(),
-                            Instant.now()
+                            house.latitude(), house.longitude(), Instant.now()
                     );
                 }
 

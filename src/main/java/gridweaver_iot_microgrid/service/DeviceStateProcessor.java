@@ -22,44 +22,30 @@ public class DeviceStateProcessor {
         this.stateMachineFactory = stateMachineFactory;
     }
 
-    /**
-     * Takes the raw telemetry, fires the appropriate event, and returns the new state.
-     */
-    public DeviceStatus processAndGetState(TelemetryPayload payload) {
-        // 1. Fetch or create the state machine for this specific device
+    // Update the method signature and battery logic:
+    public DeviceStatus processAndGetState(TelemetryPayload payload, double currentGridLoadPct) {
         StateMachine<DeviceStatus, DeviceEvent> sm = machineCache.computeIfAbsent(payload.deviceId(), id -> {
             StateMachine<DeviceStatus, DeviceEvent> newMachine = stateMachineFactory.getStateMachine(id);
             newMachine.start();
             return newMachine;
         });
 
-        // 2. Evaluate the live telemetry to determine the trigger event
         DeviceEvent eventToFire = null;
-
         if (payload.deviceType() == DeviceType.SOLAR_PANEL) {
-            if (payload.outputWatts() > 0) {
-                eventToFire = DeviceEvent.SUN_RISES;
-            } else {
-                eventToFire = DeviceEvent.SUN_SETS;
-            }
+            eventToFire = payload.outputWatts() > 0 ? DeviceEvent.SUN_RISES : DeviceEvent.SUN_SETS;
         } else if (payload.deviceType() == DeviceType.BATTERY) {
             if (payload.batteryLevelPct() >= 100) {
                 eventToFire = DeviceEvent.BATTERY_FULL;
             } else if (payload.batteryLevelPct() <= 0) {
                 eventToFire = DeviceEvent.BATTERY_EMPTY;
-            } else if (payload.outputWatts() > 0) {
-                eventToFire = DeviceEvent.GRID_DEFICIT; // Outputting power = Discharging
-            } else if (payload.outputWatts() < 0) {
-                eventToFire = DeviceEvent.GRID_SURPLUS; // Consuming power = Charging
+            } else if (currentGridLoadPct > 80.0) {
+                eventToFire = DeviceEvent.GRID_DEFICIT; // Load is high -> Discharge battery
+            } else {
+                eventToFire = DeviceEvent.GRID_SURPLUS; // Load is normal -> Charge battery
             }
         }
 
-        // 3. Trigger the state transition rule in the machine
-        if (eventToFire != null) {
-            sm.sendEvent(eventToFire);
-        }
-
-        // 4. Return the official state
+        if (eventToFire != null) sm.sendEvent(eventToFire);
         return sm.getState().getId();
     }
 }

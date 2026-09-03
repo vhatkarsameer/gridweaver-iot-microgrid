@@ -10,7 +10,7 @@ public class KafkaTopicConfig {
 
     @Bean
     public NewTopic telemetryTopic() {
-        return TopicBuilder.name("telemetry-events")
+        return TopicBuilder.name("telemetry-events-v2")
                 .partitions(6)
                 .replicas(1)
                 .build();

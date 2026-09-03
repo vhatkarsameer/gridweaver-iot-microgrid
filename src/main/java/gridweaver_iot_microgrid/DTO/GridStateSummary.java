@@ -9,6 +9,6 @@ public record GridStateSummary(
         double totalSolarGenerationKw,
         double totalBatteryDemandKw,
         double netGridBalanceKw,
-        double averageBatterySocPercentage
-
+        double averageBatterySocPercentage,
+        double gridLoadPercentage
 ) { }

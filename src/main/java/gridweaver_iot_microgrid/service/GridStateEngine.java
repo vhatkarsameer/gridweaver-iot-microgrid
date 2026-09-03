@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 @Service
 public class GridStateEngine {
@@ -20,7 +21,33 @@ public class GridStateEngine {
         }
     }
 
+    public double getCurrentGridLoadPercentage() {
+        double totalGen = latestDeviceTelemetry.values().stream()
+                .filter(p -> p.deviceType() == DeviceType.SOLAR_PANEL)
+                .mapToDouble(TelemetryPayload::outputWatts).sum();
+        double totalDemand = latestDeviceTelemetry.values().stream()
+                .filter(p -> p.deviceType() == DeviceType.BATTERY)
+                .mapToDouble(TelemetryPayload::outputWatts).sum();
+
+        if (totalGen == 0) return 100.0; // Max load if no generation
+        return (totalDemand / totalGen) * 100.0;
+    }
+
+    public Map<String, Double> getRegionalNetPowerMap() {
+        return latestDeviceTelemetry.values().stream()
+                .collect(Collectors.groupingBy(
+                        // Split regions dynamically by latitude
+                        payload -> payload.latitude() >= 19.0 ? "Region-North" : "Region-South",
+                        Collectors.summingDouble(payload ->
+                                payload.deviceType() == DeviceType.SOLAR_PANEL
+                                        ? payload.outputWatts() // Solar adds to grid
+                                        : -payload.outputWatts() // Batteries draw from grid
+                        )
+                ));
+    }
+
     public GridStateSummary calculateGridSummary() {
-        return GridStateMapper.toGridStateSummary(latestDeviceTelemetry.values());
+        double engineLoad = getCurrentGridLoadPercentage();
+        return GridStateMapper.toGridStateSummary(latestDeviceTelemetry.values(), engineLoad);
     }
 }

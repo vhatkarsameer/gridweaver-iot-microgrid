@@ -265,6 +265,14 @@ export default function App() {
               {gridSummary ? `${gridSummary.averageBatterySocPercentage.toFixed(1)}` : '...'} <span style={{ fontSize: "16px", fontWeight: "500", color: secondaryText }}>%</span>
             </div>
           </div>
+                    <div style={{ width: "1px", background: isDarkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)" }}></div>
+
+                    <div style={{ minWidth: "120px" }}>
+                      <h3 style={{ margin: "0 0 4px 0", fontSize: "11px", color: secondaryText, fontWeight: "700", letterSpacing: "1px", textTransform: "uppercase" }}>Grid Load</h3>
+                      <div style={{ fontSize: "28px", fontWeight: "600", color: gridSummary?.gridLoadPercentage > 80 ? '#ef4444' : textColor, letterSpacing: "-1px" }}>
+                        {gridSummary?.gridLoadPercentage != null ? `${gridSummary.gridLoadPercentage.toFixed(1)}` : '...'} <span style={{ fontSize: "16px", fontWeight: "500", color: secondaryText }}>%</span>
+                      </div>
+                    </div>
 
         </div>
       </div>
