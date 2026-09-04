@@ -50,7 +50,7 @@ public class IotSimulatorService {
             executor.submit(() -> runVirtualDeviceLoop(batteryId, house, DeviceType.BATTERY));
         }
 
-        System.out.println("🚀 [JAVA 21 VIRTUAL THREADS] Successfully spawned 50,000 concurrent tasks across 5,000 fixed Households!");
+        System.out.println("🚀 [JAVA 21 VIRTUAL THREADS] Successfully spawned 50,000 concurrent tasks across 25,000 fixed Households!");
     }
 
     public Map<DeviceType, Double> computePowerByDeviceType(List<TelemetryPayload> activeTelemetry) {
