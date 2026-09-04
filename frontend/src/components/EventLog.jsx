@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import "./week4-dashboard.css";
+import "./dashboard.css";
 
 const DEFAULT_EVENTS = [
   { id: 1, time: "14:32:08", type: "BALANCE", region: "North", message: "Load shifted to North hydro reserve", status: "success" },
@@ -8,7 +8,7 @@ const DEFAULT_EVENTS = [
   { id: 4, time: "14:28:55", type: "AUDIT", region: "Central", message: "Operator policy update recorded", status: "success" },
 ];
 
-export default function Week4EventLog({ events = DEFAULT_EVENTS, onSimulate }) {
+export default function EventLog({ events = DEFAULT_EVENTS, onSimulate }) {
   const [filter, setFilter] = useState("ALL");
   const [paused, setPaused] = useState(false);
   const visibleEvents = useMemo(
@@ -17,12 +17,12 @@ export default function Week4EventLog({ events = DEFAULT_EVENTS, onSimulate }) {
   );
 
   return (
-    <section className="week4-panel week4-events-panel" aria-label="Event log">
-      <div className="week4-panel-heading">
+    <section className="dashboard-panel dashboard-events-panel" aria-label="Event log">
+      <div className="dashboard-panel-heading">
         <div><h2>Event log</h2><p>System activity and audit trail</p></div>
-        <span className="week4-live-label"><i /> LIVE</span>
+        <span className="dashboard-live-label"><i /> LIVE</span>
       </div>
-      <div className="week4-filter-row">
+      <div className="dashboard-filter-row">
         <select value={filter} onChange={(event) => setFilter(event.target.value)} aria-label="Filter events">
           <option value="ALL">All events</option>
           <option value="BALANCE">Balance</option>
@@ -34,17 +34,17 @@ export default function Week4EventLog({ events = DEFAULT_EVENTS, onSimulate }) {
           {paused ? "▶ Resume live" : "Ⅱ Pause live"}
         </button>
       </div>
-      <div className="week4-event-list">
+      <div className="dashboard-event-list">
         {visibleEvents.map((event) => (
-          <article className="week4-event-row" key={event.id}>
-            <span className={`week4-event-icon ${event.status}`}>{event.type === "ALERT" ? "!" : "✓"}</span>
-            <div className="week4-event-copy"><div><strong>{event.type}</strong><span>{event.region}</span></div><p>{event.message}</p></div>
+          <article className="dashboard-event-row" key={event.id}>
+            <span className={`dashboard-event-icon ${event.status}`}>{event.type === "ALERT" ? "!" : "✓"}</span>
+            <div className="dashboard-event-copy"><div><strong>{event.type}</strong><span>{event.region}</span></div><p>{event.message}</p></div>
             <time>{event.time}</time>
           </article>
         ))}
-        {!visibleEvents.length && <p className="week4-empty">No events in this category.</p>}
+        {!visibleEvents.length && <p className="dashboard-empty">No events in this category.</p>}
       </div>
-      <button className="week4-load-button" type="button" onClick={onSimulate}>＋ Record audit event</button>
+      <button className="dashboard-load-button" type="button" onClick={onSimulate}>＋ Record audit event</button>
     </section>
   );
 }
