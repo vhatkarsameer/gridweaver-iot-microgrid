@@ -1,5 +1,5 @@
 import { useState } from "react";
-import "./week4-dashboard.css";
+import "./dashboard.css";
 
 const NODES = [
   { id: "north", name: "North", value: "1.42 GW", detail: "Hydro reserve", x: 142, y: 82, color: "#4ee3a0" },
