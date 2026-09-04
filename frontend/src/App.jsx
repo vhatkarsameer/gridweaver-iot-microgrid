@@ -2,6 +2,8 @@ import React, { useEffect, useState, useRef } from "react";
 import { Client } from "@stomp/stompjs";
 import "./App.css";
 import GridMap from "./components/GridMap.jsx";
+import Week4EventLog from "./components/Week4EventLog.jsx";
+import Week4PowerFlow from "./components/Week4PowerFlow.jsx";
 
 const statusColors = {
   IDLE: "#64748b",
@@ -17,6 +19,7 @@ export default function App() {
   const [connected, setConnected] = useState(false);
   const [gridSummary, setGridSummary] = useState(null);
   const [selectedHouseId, setSelectedHouseId] = useState(null);
+  const [showWeek4Dashboard, setShowWeek4Dashboard] = useState(false);
 
   const searchInputRef = useRef(null);
 
@@ -169,6 +172,9 @@ export default function App() {
 
         {/* Top Controls Island */}
         <div style={{ position: "absolute", top: "24px", right: "24px", display: "flex", gap: "12px", alignItems: "center", pointerEvents: "auto" }}>
+          <button onClick={() => setShowWeek4Dashboard(!showWeek4Dashboard)} style={{ background: showWeek4Dashboard ? "#2563eb" : panelBg, backdropFilter: blurEffect, border: panelBorder, color: showWeek4Dashboard ? "#ffffff" : textColor, padding: "10px 16px", borderRadius: "20px", cursor: "pointer", fontWeight: "600", fontSize: "13px", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}>
+            {showWeek4Dashboard ? "Close Week 4" : "Week 4 dashboard"}
+          </button>
           <button onClick={() => setIsDarkMode(!isDarkMode)} style={{ background: panelBg, backdropFilter: blurEffect, border: panelBorder, color: textColor, padding: "10px 16px", borderRadius: "20px", cursor: "pointer", fontWeight: "600", fontSize: "13px", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}>
             {isDarkMode ? "Light" : "Dark"}
           </button>
@@ -178,8 +184,16 @@ export default function App() {
           </div>
         </div>
 
+        {/* WEEK 4 FRONTEND DRAWER: additive integration; existing map and telemetry remain underneath */}
+        {showWeek4Dashboard && (
+          <div style={{ position: "absolute", top: "92px", right: "24px", bottom: "118px", width: "min(440px, calc(100vw - 48px))", overflowY: "auto", display: "grid", alignContent: "start", gap: "14px", pointerEvents: "auto", borderRadius: "14px" }}>
+            <Week4PowerFlow />
+            <Week4EventLog />
+          </div>
+        )}
+
         {/* Selected House Details Floating Card */}
-        {activeSelectedHouse && (
+        {activeSelectedHouse && !showWeek4Dashboard && (
           <div style={{ position: "absolute", top: "100px", right: "24px", width: "320px", background: panelBg, backdropFilter: blurEffect, color: textColor, border: panelBorder, borderRadius: "16px", padding: "24px", boxShadow: "0 20px 40px rgba(0,0,0,0.2)", pointerEvents: "auto" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "20px" }}>
               <div>
@@ -271,3 +285,4 @@ export default function App() {
     </div>
   );
 }
+
