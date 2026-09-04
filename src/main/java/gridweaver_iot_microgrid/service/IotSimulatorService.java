@@ -29,8 +29,9 @@ public class IotSimulatorService {
         this.kafkaProducer = kafkaProducer;
     }
 
+
     @EventListener(ApplicationReadyEvent.class)
-    public void startDeviceSimulationVirtualThreads() {
+    public void startConcurrentDeviceVirtualThreads() {
         Random random = new Random();
 
         for (int i = 0; i < 25000; i++) {
