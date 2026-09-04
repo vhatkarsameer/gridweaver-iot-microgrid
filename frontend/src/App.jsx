@@ -2,6 +2,8 @@ import React, { useEffect, useState, useRef } from "react";
 import { Client } from "@stomp/stompjs";
 import "./App.css";
 import GridMap from "./components/GridMap.jsx";
+import EventLog from "./components/EventLog.jsx";
+import PowerFlow from "./components/PowerFlow.jsx";
 
 const statusColors = {
   IDLE: "#64748b",
@@ -17,6 +19,7 @@ export default function App() {
   const [connected, setConnected] = useState(false);
   const [gridSummary, setGridSummary] = useState(null);
   const [selectedHouseId, setSelectedHouseId] = useState(null);
+  const [showDashboard, setShowDashboard] = useState(false);
 
   const searchInputRef = useRef(null);
 
@@ -169,6 +172,9 @@ export default function App() {
 
         {/* Top Controls Island */}
         <div style={{ position: "absolute", top: "24px", right: "24px", display: "flex", gap: "12px", alignItems: "center", pointerEvents: "auto" }}>
+          <button onClick={() => setShowDashboard(!showDashboard)} style={{ background: showDashboard ? "#2563eb" : panelBg, backdropFilter: blurEffect, border: panelBorder, color: showDashboard ? "#ffffff" : textColor, padding: "10px 16px", borderRadius: "20px", cursor: "pointer", fontWeight: "600", fontSize: "13px", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}>
+            {showDashboard ? "Close dashboard" : "Dashboard"}
+          </button>
           <button onClick={() => setIsDarkMode(!isDarkMode)} style={{ background: panelBg, backdropFilter: blurEffect, border: panelBorder, color: textColor, padding: "10px 16px", borderRadius: "20px", cursor: "pointer", fontWeight: "600", fontSize: "13px", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}>
             {isDarkMode ? "Light" : "Dark"}
           </button>
@@ -178,8 +184,16 @@ export default function App() {
           </div>
         </div>
 
+        {/* FRONTEND DRAWER: additive integration; existing map and telemetry remain underneath */}
+        {showDashboard && (
+          <div style={{ position: "absolute", top: "92px", right: "24px", bottom: "118px", width: "min(440px, calc(100vw - 48px))", overflowY: "auto", display: "grid", alignContent: "start", gap: "14px", pointerEvents: "auto", borderRadius: "14px" }}>
+            <PowerFlow />
+            <EventLog />
+          </div>
+        )}
+
         {/* Selected House Details Floating Card */}
-        {activeSelectedHouse && (
+        {activeSelectedHouse && !showDashboard && (
           <div style={{ position: "absolute", top: "100px", right: "24px", width: "320px", background: panelBg, backdropFilter: blurEffect, color: textColor, border: panelBorder, borderRadius: "16px", padding: "24px", boxShadow: "0 20px 40px rgba(0,0,0,0.2)", pointerEvents: "auto" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "20px" }}>
               <div>

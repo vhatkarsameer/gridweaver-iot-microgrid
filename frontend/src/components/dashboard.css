@@ -1,0 +1,166 @@
+.dashboard-panel {
+  background: rgba(7, 20, 35, 0.9);
+  border: 1px solid rgba(120, 150, 180, 0.22);
+  border-radius: 14px;
+  color: #e7eff8;
+  overflow: hidden;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+.dashboard-panel-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 20px;
+  border-bottom: 1px solid rgba(120, 150, 180, 0.18);
+}
+
+.dashboard-panel h2 {
+  margin: 0 0 5px;
+  font-size: 16px;
+}
+
+.dashboard-panel p {
+  margin: 0;
+  color: #7890a9;
+  font-size: 11px;
+}
+
+.dashboard-live-label {
+  color: #4ee3a0;
+  font: 10px monospace;
+  letter-spacing: 0.8px;
+}
+
+.dashboard-live-label i,
+.dashboard-map-status i {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 7px;
+  border-radius: 50%;
+  background: #4ee3a0;
+  box-shadow: 0 0 10px #4ee3a0;
+}
+
+.dashboard-map-wrap {
+  position: relative;
+  background: #081525;
+}
+
+.dashboard-map-status {
+  position: absolute;
+  z-index: 1;
+  top: 16px;
+  left: 20px;
+  color: #9bb1c6;
+  font: 10px monospace;
+  letter-spacing: 0.7px;
+}
+
+.dashboard-map-status span {
+  margin-left: 14px;
+  color: #526c87;
+  letter-spacing: 0;
+}
+
+.dashboard-flow-map {
+  display: block;
+  width: 100%;
+  min-height: 330px;
+  padding: 20px;
+}
+
+.dashboard-route {
+  fill: none;
+  stroke: #29425e;
+  stroke-width: 2;
+  stroke-dasharray: 5 8;
+}
+
+.dashboard-flow-line {
+  fill: none;
+  stroke: #4ee3a0;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-dasharray: 13 17;
+  animation: dashboard-flow 1.8s linear infinite;
+}
+
+.dashboard-flow-line.blue {
+  stroke: #55b9ff;
+  animation-delay: -0.8s;
+}
+
+@keyframes dashboard-flow {
+  to {
+    stroke-dashoffset: -60;
+  }
+}
+
+.dashboard-grid-node {
+  cursor: pointer;
+  transition: filter 0.2s ease;
+}
+
+.dashboard-grid-node:hover,
+.dashboard-grid-node.selected {
+  filter: drop-shadow(0 0 9px #4ee3a0);
+}
+
+.dashboard-grid-node text {
+  fill: #b6c9dc;
+  font: 10px monospace;
+  letter-spacing: 1px;
+}
+
+.dashboard-grid-node text.value {
+  fill: #66809a;
+  font-size: 9px;
+}
+
+.dashboard-selected-region {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 14px 20px;
+  border-top: 1px solid rgba(120, 150, 180, 0.18);
+}
+
+.dashboard-selected-region > span {
+  width: 3px;
+  height: 34px;
+  border-radius: 3px;
+}
+
+.dashboard-selected-region small {
+  display: block;
+  color: #5e7891;
+  font: 8px monospace;
+  letter-spacing: 1px;
+}
+
+.dashboard-selected-region b {
+  display: block;
+  margin-top: 5px;
+  font-size: 12px;
+}
+
+.dashboard-selected-region em {
+  margin-left: 6px;
+  color: #7890a9;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 400;
+}
+
+.dashboard-selected-region > strong {
+  margin-left: auto;
+  color: #4ee3a0;
+  font: 14px monospace;
+}
+
+.dashboard-health {
+  padding-left: 16px;
+  border-left: 1px soli
