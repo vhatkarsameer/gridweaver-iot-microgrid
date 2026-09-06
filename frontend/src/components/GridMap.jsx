@@ -1,89 +1,101 @@
-import { useEffect, useMemo } from 'react';
-import { MapContainer, TileLayer, useMap } from 'react-leaflet';
-import MarkerClusterGroup from 'react-leaflet-cluster';
-import L from 'leaflet';
-import DeviceMarker from './DeviceMarker.jsx';
-import 'leaflet/dist/leaflet.css';
-import 'leaflet.heat';
+import { useEffect, useMemo } from "react";
+import { MapContainer, TileLayer, useMap } from "react-leaflet";
+import L from "leaflet";
+import "leaflet.heat";
+import MarkerClusterGroup from "react-leaflet-cluster";
+import "leaflet/dist/leaflet.css";
+import HouseholdMarker from "./HouseholdMarker.jsx";
 
-const MAHARASHTRA_CENTER = [19.7515, 75.7139];
-const MAHARASHTRA_ZOOM = 7;
-const MAHARASHTRA_BOUNDS = [
-  [15.5, 72.0],
-  [22.2, 81.5],
-];
+const MAHARASHTRA_CENTER = [19.0, 77.0];
 
-function numberFrom(...values) {
-  for (const value of values) {
-    const number = Number(value);
-    if (Number.isFinite(number)) return number;
-  }
-  return 0;
+function MapFlyTo({ activeHouse }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!activeHouse) return;
+
+    const latitude = Number(activeHouse.latitude);
+    const longitude = Number(activeHouse.longitude);
+
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+
+    map.flyTo([latitude, longitude], 16, {
+      animate: true,
+      duration: 1.5,
+    });
+  }, [activeHouse, map]);
+
+  return null;
 }
 
-function HeatmapLayer({ devices }) {
+function getHeatIntensity(house) {
+  const candidates = [
+    house?.solar?.generationKw,
+    house?.solar?.powerKw,
+    house?.solar?.currentKw,
+    house?.solarGenerationKw,
+    house?.powerKw,
+    house?.power,
+    house?.solar?.generation,
+  ];
+
+  const value = candidates.find((candidate) =>
+    Number.isFinite(Number(candidate)),
+  );
+
+  if (value === undefined) return 0.35;
+
+  // Keep the weight in a stable 0–1 range for leaflet.heat.
+  return Math.max(0.15, Math.min(1, Number(value) / 10));
+}
+
+function HeatmapLayer({ households }) {
   const map = useMap();
+
   const heatPoints = useMemo(
     () =>
-      devices
-        .map((device) => {
-          const latitude = numberFrom(
-            device.latitude,
-            device.lat,
-            device.location?.latitude,
-            device.location?.lat,
-          );
-          const longitude = numberFrom(
-            device.longitude,
-            device.lng,
-            device.lon,
-            device.location?.longitude,
-            device.location?.lng,
-            device.location?.lon,
-          );
-          const intensity = Math.min(
-            1,
-            Math.max(
-              0.15,
-              numberFrom(
-                device.heatIntensity,
-                device.outputWatts,
-                device.power,
-                device.solarGeneration,
-                1,
-              ) / 1000,
-            ),
-          );
+      (Array.isArray(households) ? households : [])
+        .map((house) => {
+          const latitude = Number(house?.latitude);
+          const longitude = Number(house?.longitude);
 
-          return [latitude, longitude, intensity];
+          if (
+            !Number.isFinite(latitude) ||
+            !Number.isFinite(longitude) ||
+            latitude < -90 ||
+            latitude > 90 ||
+            longitude < -180 ||
+            longitude > 180
+          ) {
+            return null;
+          }
+
+          return [latitude, longitude, getHeatIntensity(house)];
         })
-        .filter(
-          ([latitude, longitude]) =>
-            latitude >= -90 && latitude <= 90 && longitude >= -180 && longitude <= 180,
-        ),
-    [devices],
+        .filter(Boolean),
+    [households],
   );
 
   useEffect(() => {
-    if (!map || heatPoints.length === 0 || typeof L.heatLayer !== 'function') {
-      return undefined;
-    }
+    if (!map || heatPoints.length === 0) return undefined;
 
     const heatLayer = L.heatLayer(heatPoints, {
-      radius: 30,
+      radius: 28,
       blur: 22,
       maxZoom: 12,
-      minOpacity: 0.35,
+      max: 1,
+      minOpacity: 0.28,
       gradient: {
-        0.15: '#2563eb',
-        0.35: '#06b6d4',
-        0.55: '#22c55e',
-        0.75: '#facc15',
-        1.0: '#ef4444',
+        0.2: "#2563eb",
+        0.45: "#06b6d4",
+        0.7: "#facc15",
+        0.9: "#f97316",
+        1.0: "#dc2626",
       },
     });
 
     heatLayer.addTo(map);
+
     return () => {
       map.removeLayer(heatLayer);
     };
@@ -92,68 +104,74 @@ function HeatmapLayer({ devices }) {
   return null;
 }
 
-export default function GridMap({ devices = [], telemetry = [] }) {
-  const inputDevices = devices.length > 0 ? devices : telemetry;
-  const safeDevices = Array.isArray(inputDevices)
-    ? inputDevices.filter((device) => device && typeof device === 'object')
-    : Object.values(inputDevices || {}).filter((device) => device && typeof device === 'object');
+export default function GridMap({
+  households = [],
+  onHouseSelect,
+  activeHouse,
+}) {
+  const safeHouseholds = Array.isArray(households) ? households : [];
 
   return (
-    <section className="grid-map-shell" aria-label="Maharashtra live microgrid map">
-      <div className="grid-map-toolbar">
-        <div>
-          <p className="grid-map-eyebrow">WEEK 3 GIS PERFORMANCE VIEW</p>
-          <h2>Maharashtra device network</h2>
-          <p className="grid-map-help">Heatmap intensity and clustered device markers for high-volume telemetry.</p>
-        </div>
-        <span className="grid-map-count">
-          {safeDevices.length.toLocaleString()} {safeDevices.length === 1 ? 'device' : 'devices'}
-        </span>
-      </div>
+    <section
+      style={{
+        position: "relative",
+        width: "100%",
+        height: "100%",
+        minHeight: "540px",
+        overflow: "hidden",
+      }}
+    >
+      <MapContainer
+        center={MAHARASHTRA_CENTER}
+        zoom={7}
+        minZoom={6}
+        maxZoom={18}
+        scrollWheelZoom={true}
+        preferCanvas={true}
+        zoomAnimation={false}
+        fadeAnimation={false}
+        markerZoomAnimation={false}
+        style={{
+          width: "100%",
+          height: "100%",
+          minHeight: "540px",
+          background: "#0f172a",
+        }}
+      >
+        <MapFlyTo activeHouse={activeHouse} />
+        <HeatmapLayer households={safeHouseholds} />
 
-      <div className="grid-map-canvas">
-        <MapContainer
-          center={MAHARASHTRA_CENTER}
-          zoom={MAHARASHTRA_ZOOM}
-          minZoom={5}
-          maxZoom={18}
-          maxBounds={MAHARASHTRA_BOUNDS}
-          maxBoundsViscosity={0.25}
-          scrollWheelZoom
-          zoomControl
-          preferCanvas
-          zoomAnimation={false}
-          markerZoomAnimation={false}
-          style={{ width: '100%', height: '100%', minHeight: '540px' }}
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          updateWhenZooming={false}
+          updateWhenIdle={true}
+          keepBuffer={1}
+        />
+
+        <MarkerClusterGroup
+          chunkedLoading={true}
+          chunkInterval={100}
+          chunkDelay={25}
+          removeOutsideVisibleBounds={true}
+          maxClusterRadius={60}
+          animate={false}
+          spiderfyOnMaxZoom={true}
+          showCoverageOnHover={false}
         >
-          <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            updateWhenZooming={false}
-            updateWhenIdle
-            keepBuffer={1}
-          />
+          {safeHouseholds.map((house) => {
+            const solarStatus = house?.solar?.status || "WAITING";
 
-          <HeatmapLayer devices={safeDevices} />
-
-          <MarkerClusterGroup
-            chunkedLoading
-            chunkInterval={100}
-            chunkDelay={25}
-            removeOutsideVisibleBounds
-            animate={false}
-            showCoverageOnHover={false}
-            maxClusterRadius={60}
-          >
-            {safeDevices.map((device, index) => (
-              <DeviceMarker
-                key={device.deviceId ?? device.id ?? `device-${index}`}
-                device={device}
+            return (
+              <HouseholdMarker
+                key={`${house.houseId}-${solarStatus}`}
+                household={house}
+                onSelect={onHouseSelect}
               />
-            ))}
-          </MarkerClusterGroup>
-        </MapContainer>
-      </div>
+            );
+          })}
+        </MarkerClusterGroup>
+      </MapContainer>
     </section>
   );
 }
