@@ -34,15 +34,10 @@ public class DeviceStateProcessor {
         if (payload.deviceType() == DeviceType.SOLAR_PANEL) {
             eventToFire = payload.outputWatts() > 0 ? DeviceEvent.SUN_RISES : DeviceEvent.SUN_SETS;
         } else if (payload.deviceType() == DeviceType.BATTERY) {
-            if (payload.batteryLevelPct() >= 100) {
-                eventToFire = DeviceEvent.BATTERY_FULL;
-            } else if (payload.batteryLevelPct() <= 0) {
-                eventToFire = DeviceEvent.BATTERY_EMPTY;
-            } else if (currentGridLoadPct > 80.0) {
-                eventToFire = DeviceEvent.GRID_DEFICIT; // Load is high -> Discharge battery
-            } else {
-                eventToFire = DeviceEvent.GRID_SURPLUS; // Load is normal -> Charge battery
-            }
+            if(currentGridLoadPct > 80.0)
+                eventToFire = payload.batteryLevelPct() > 0 ? DeviceEvent.GRID_DEFICIT : DeviceEvent.BATTERY_EMPTY;
+            else
+                eventToFire = payload.batteryLevelPct() < 100 ? DeviceEvent.GRID_SURPLUS : DeviceEvent.BATTERY_FULL;
         }
 
         if (eventToFire != null) sm.sendEvent(eventToFire);
