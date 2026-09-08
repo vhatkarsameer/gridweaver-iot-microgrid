@@ -14,14 +14,10 @@ function MapFlyTo({ activeHouse }) {
   useEffect(() => {
     if (!activeHouse) return;
 
-    map.flyTo(
-      [activeHouse.latitude, activeHouse.longitude],
-      16,
-      {
-        animate: true,
-        duration: 1.5,
-      }
-    );
+    map.flyTo([activeHouse.latitude, activeHouse.longitude], 16, {
+      animate: true,
+      duration: 1.5,
+    });
   }, [activeHouse, map]);
 
   return null;
@@ -34,32 +30,28 @@ function HeatmapLayer({ households }) {
     return households
       .filter(
         (house) =>
-          Number.isFinite(house.latitude) &&
-          Number.isFinite(house.longitude)
+          Number.isFinite(Number(house.latitude)) &&
+          Number.isFinite(Number(house.longitude))
       )
       .map((house) => {
-        const solarOutput = house.solar?.outputWatts || 0;
-        const batteryOutput = house.battery?.outputWatts || 0;
-
+        const solarOutput = Number(house.solar?.outputWatts || 0);
+        const batteryOutput = Number(house.battery?.outputWatts || 0);
         const totalPower = solarOutput + batteryOutput;
 
-        const intensity = Math.min(
-          1,
-          Math.max(0.2, totalPower / 5000)
-        );
+        // leaflet.heat expects an intensity between 0 and 1.
+        // A minimum value keeps valid telemetry locations visible.
+        const intensity = Math.min(1, Math.max(0.2, totalPower / 5000));
 
         return [
-          house.latitude,
-          house.longitude,
+          Number(house.latitude),
+          Number(house.longitude),
           intensity,
         ];
       });
   }, [households]);
 
   useEffect(() => {
-    if (!map || heatPoints.length === 0) {
-      return undefined;
-    }
+    if (!heatPoints.length) return undefined;
 
     const heatLayer = L.heatLayer(heatPoints, {
       radius: 30,
@@ -86,11 +78,7 @@ function HeatmapLayer({ households }) {
   return null;
 }
 
-export default function GridMap({
-  households,
-  onHouseSelect,
-  activeHouse,
-}) {
+export default function GridMap({ households, onHouseSelect, activeHouse }) {
   return (
     <section
       style={{
@@ -117,12 +105,12 @@ export default function GridMap({
       >
         <MapFlyTo activeHouse={activeHouse} />
 
-        <HeatmapLayer households={households} />
-
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
+
+        <HeatmapLayer households={households} />
 
         <MarkerClusterGroup
           chunkedLoading={true}
@@ -130,7 +118,7 @@ export default function GridMap({
           animate={false}
           spiderfyOnMaxZoom={true}
         >
-          {households.map((house ) => {
+          {households.map((house) => {
             const solarStatus = house.solar?.status || "WAITING";
             const batteryStatus = house.battery?.status || "WAITING";
 
