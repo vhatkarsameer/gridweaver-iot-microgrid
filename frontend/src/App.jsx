@@ -2,8 +2,7 @@ import React, { useEffect, useState, useRef } from "react";
 import { Client } from "@stomp/stompjs";
 import "./App.css";
 import GridMap from "./components/GridMap.jsx";
-import EventLog from "./components/EventLog.jsx";
-import PowerFlow from "./components/PowerFlow.jsx";
+
 
 const statusColors = {
   IDLE: "#64748b",
