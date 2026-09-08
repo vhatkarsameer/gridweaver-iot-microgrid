@@ -24,62 +24,54 @@ function MapFlyTo({ activeHouse }) {
   return null;
 }
 
-function HeatmapLayer({ households }) {
+// Generic HeatmapLayer that accepts specific points and a gradient
+function HeatmapLayer({ points, gradient, radius = 30, blur = 24 }) {
   const map = useMap();
 
-  const heatPoints = useMemo(() => {
-    return households
-      .filter(
-        (house) =>
-          Number.isFinite(Number(house.latitude)) &&
-          Number.isFinite(Number(house.longitude))
-      )
-      .map((house) => {
-        const solarOutput = Number(house.solar?.outputWatts || 0);
-        const batteryOutput = Number(house.battery?.outputWatts || 0);
-        const totalPower = solarOutput + batteryOutput;
-
-        // leaflet.heat expects an intensity between 0 and 1.
-        // A minimum value keeps valid telemetry locations visible.
-        const intensity = Math.min(1, Math.max(0.2, totalPower / 5000));
-
-        return [
-          Number(house.latitude),
-          Number(house.longitude),
-          intensity,
-        ];
-      });
-  }, [households]);
-
   useEffect(() => {
-    if (!heatPoints.length) return undefined;
+    if (!points || points.length === 0) return undefined;
 
-    const heatLayer = L.heatLayer(heatPoints, {
-      radius: 30,
-      blur: 24,
+    const heatLayer = L.heatLayer(points, {
+      radius,
+      blur,
       maxZoom: 12,
       minOpacity: 0.35,
       max: 0.9,
-      gradient: {
-        0.2: "#2563eb",
-        0.4: "#06b6d4",
-        0.6: "#22c55e",
-        0.8: "#facc15",
-        1.0: "#ef4444",
-      },
+      gradient,
     });
 
     heatLayer.addTo(map);
-
     return () => {
       map.removeLayer(heatLayer);
     };
-  }, [map, heatPoints]);
+  }, [map, points, gradient, radius, blur]);
 
   return null;
 }
 
 export default function GridMap({ households, onHouseSelect, activeHouse }) {
+  // Split the data into two separate arrays for dual-layer rendering
+  const { generationPoints, consumptionPoints } = useMemo(() => {
+    const gen = [];
+    const con = [];
+
+    (households || []).forEach((house) => {
+      if (!Number.isFinite(Number(house.latitude)) || !Number.isFinite(Number(house.longitude))) return;
+
+      const solarOutput = Number(house.solar?.outputWatts || 0);
+      const batteryOutput = Number(house.battery?.outputWatts || 0);
+
+      // Keep intensity bounded between 0.2 and 1.0 for visibility
+      const genIntensity = Math.min(1, Math.max(0.2, solarOutput / 5000));
+      const conIntensity = Math.min(1, Math.max(0.2, batteryOutput / 5000));
+
+      if (solarOutput > 0) gen.push([Number(house.latitude), Number(house.longitude), genIntensity]);
+      if (batteryOutput > 0) con.push([Number(house.latitude), Number(house.longitude), conIntensity]);
+    });
+
+    return { generationPoints: gen, consumptionPoints: con };
+  }, [households]);
+
   return (
     <section
       style={{
@@ -105,13 +97,22 @@ export default function GridMap({ households, onHouseSelect, activeHouse }) {
         }}
       >
         <MapFlyTo activeHouse={activeHouse} />
-
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
 
-        <HeatmapLayer households={households} />
+        {/* Layer 1: Solar Generation (Green to Yellow) */}
+        <HeatmapLayer
+          points={generationPoints}
+          gradient={{ 0.2: "#064e3b", 0.45: "#10b981", 0.7: "#facc15", 1: "#fff7ed" }}
+        />
+
+        {/* Layer 2: Battery Consumption (Blue to Red) */}
+        <HeatmapLayer
+          points={consumptionPoints}
+          gradient={{ 0.2: "#172554", 0.45: "#2563eb", 0.7: "#f97316", 1: "#dc2626" }}
+        />
 
         <MarkerClusterGroup
           chunkedLoading={true}
@@ -119,10 +120,9 @@ export default function GridMap({ households, onHouseSelect, activeHouse }) {
           animate={false}
           spiderfyOnMaxZoom={true}
         >
-          {households.map((house) => {
+          {(households || []).map((house) => {
             const solarStatus = house.solar?.status || "WAITING";
             const batteryStatus = house.battery?.status || "WAITING";
-
             return (
               <HouseholdMarker
                 key={`${house.houseId}-${solarStatus}-${batteryStatus}`}
