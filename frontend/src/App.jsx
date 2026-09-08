@@ -1,279 +1,308 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Client } from '@stomp/stompjs';
-import GridMap from './components/GridMap.jsx';
-import MonitoringDashboard from './components/MonitoringDashboard.jsx';
-import * as mockTelemetryModule from './data/mockTelemetry.js';
-import './App.css';
+import React, { useEffect, useState, useRef } from "react";
+import { Client } from "@stomp/stompjs";
+import "./App.css";
+import GridMap from "./components/GridMap.jsx";
+import EventLog from "./components/EventLog.jsx";
+import PowerFlow from "./components/PowerFlow.jsx";
 
-const DEFAULT_BROKER_URL = 'ws://localhost:8080/ws-grid';
-const TELEMETRY_TOPIC = '/topic/telemetry';
-const THEME_STORAGE_KEY = 'app-theme';
-const UI_UPDATE_INTERVAL = 1000;
-const MAX_DEVICES = 50000;
-const MAX_RECENT_EVENTS = 40;
-
-const MAHARASHTRA_CENTER = { latitude: 19.7515, longitude: 75.7139 };
-
-function firstDefined(...values) {
-  return values.find((value) => value !== undefined && value !== null && value !== '');
-}
-
-function toNumber(value, fallback = 0) {
-  const number = Number(value);
-  return Number.isFinite(number) ? number : fallback;
-}
-
-function getMockDevices() {
-  const exportedDevices =
-    mockTelemetryModule.initialMockDevices ??
-    mockTelemetryModule.mockTelemetry ??
-    mockTelemetryModule.default ??
-    [];
-
-  return Array.isArray(exportedDevices)
-    ? exportedDevices
-    : exportedDevices && typeof exportedDevices === 'object'
-      ? Object.values(exportedDevices)
-      : [];
-}
-
-function normalizeTelemetry(rawPayload, previous = {}) {
-  const payload = rawPayload?.payload && typeof rawPayload.payload === 'object'
-    ? { ...rawPayload, ...rawPayload.payload }
-    : rawPayload;
-
-  const deviceId = firstDefined(payload?.deviceId, payload?.device_id, payload?.id);
-  if (deviceId === undefined || deviceId === null || deviceId === '') return null;
-
-  const merged = { ...previous, ...payload };
-  const location = merged.location && typeof merged.location === 'object' ? merged.location : {};
-
-  return {
-    ...merged,
-    deviceId: String(deviceId),
-    deviceType: firstDefined(merged.deviceType, merged.device_type, previous.deviceType, 'UNKNOWN_DEVICE'),
-    status: String(firstDefined(merged.status, merged.state, previous.status, 'IDLE')).toUpperCase(),
-    outputWatts: toNumber(firstDefined(merged.outputWatts, merged.output_watts, merged.power, previous.outputWatts), 0),
-    batteryLevelPct: toNumber(firstDefined(merged.batteryLevelPct, merged.battery_level, merged.batteryLevel, previous.batteryLevelPct), 0),
-    latitude: toNumber(firstDefined(merged.latitude, merged.lat, location.latitude, location.lat, previous.latitude, MAHARASHTRA_CENTER.latitude), MAHARASHTRA_CENTER.latitude),
-    longitude: toNumber(firstDefined(merged.longitude, merged.lng, merged.lon, location.longitude, location.lng, location.lon, previous.longitude, MAHARASHTRA_CENTER.longitude), MAHARASHTRA_CENTER.longitude),
-    timestamp: firstDefined(merged.timestamp, merged.eventTime, merged.createdAt, new Date().toISOString()),
-  };
-}
-
-function normalizeEvent(rawPayload, receivedAt) {
-  const payload = rawPayload?.payload && typeof rawPayload.payload === 'object'
-    ? { ...rawPayload, ...rawPayload.payload }
-    : rawPayload || {};
-  const status = String(firstDefined(payload.status, payload.state, payload.processingStatus, 'PROCESSED')).toUpperCase();
-  const eventTimestamp = firstDefined(payload.timestamp, payload.eventTime, payload.createdAt);
-  const eventTime = eventTimestamp ? new Date(eventTimestamp).getTime() : NaN;
-  const receivedTime = receivedAt.getTime();
-  const latency = Number.isFinite(eventTime) ? Math.max(0, receivedTime - eventTime) : null;
-  const processingValue = firstDefined(payload.processingMs, payload.processingTimeMs, payload.processingTime, payload.processing_time_ms);
-  const deviceId = firstDefined(payload.deviceId, payload.device_id, payload.id, 'unknown');
-  const eventId = firstDefined(payload.eventId, payload.event_id, payload.id, `${deviceId}-${receivedTime}`);
-
-  return {
-    id: String(eventId),
-    deviceId: String(deviceId),
-    eventType: String(firstDefined(payload.eventType, payload.event_type, payload.type, 'TELEMETRY')),
-    status,
-    partition: firstDefined(payload.partition, payload.kafkaPartition),
-    offset: firstDefined(payload.offset, payload.kafkaOffset),
-    processingMs: processingValue == null ? null : toNumber(processingValue, null),
-    latencyMs: latency,
-    timestamp: eventTimestamp || receivedAt.toISOString(),
-    receivedAt: receivedAt.toISOString(),
-  };
-}
-
-function createInitialDeviceMap() {
-  return getMockDevices().reduce((result, device) => {
-    const normalized = normalizeTelemetry(device);
-    if (normalized) result[normalized.deviceId] = normalized;
-    return result;
-  }, {});
-}
+const statusColors = {
+  IDLE: "#64748b",
+  CHARGING: "#06b6d4",
+  DISCHARGING: "#f59e0b",
+  GENERATING: "#10b981",
+  FAULT: "#ef4444",
+};
 
 export default function App() {
-  const [devicesById, setDevicesById] = useState(() => createInitialDeviceMap());
-  const [recentEvents, setRecentEvents] = useState([]);
-  const [isConnected, setIsConnected] = useState(false);
-  const [connectionError, setConnectionError] = useState('');
-  const [lastMessageAt, setLastMessageAt] = useState(null);
-  const [isDark, setIsDark] = useState(() => localStorage.getItem(THEME_STORAGE_KEY) === 'dark');
-  const [streamStats, setStreamStats] = useState({ received: 0, processed: 0, failed: 0, processingTotal: 0, processingCount: 0, latencyTotal: 0, latencyCount: 0 });
+  const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem("app-theme") === "dark");
+  const [householdMap, setHouseholdMap] = useState({});
+  const [connected, setConnected] = useState(false);
+  const [gridSummary, setGridSummary] = useState(null);
+  const [selectedHouseId, setSelectedHouseId] = useState(null);
+  const [showDashboard, setShowDashboard] = useState(false);
 
-  const devicesByIdRef = useRef(devicesById);
-  const recentEventsRef = useRef(recentEvents);
-  const streamStatsRef = useRef(streamStats);
-  const pendingDevicesRef = useRef(null);
-  const pendingEventsRef = useRef(null);
-  const pendingStatsRef = useRef(null);
-  const pendingMessageAtRef = useRef(null);
-  const updateTimerRef = useRef(null);
-
-  const devices = useMemo(() => Object.values(devicesById), [devicesById]);
+  const searchInputRef = useRef(null);
 
   useEffect(() => {
-    localStorage.setItem(THEME_STORAGE_KEY, isDark ? 'dark' : 'light');
-  }, [isDark]);
+    localStorage.setItem("app-theme", isDarkMode ? "dark" : "light");
+    document.body.classList.toggle("dark-mode", isDarkMode);
+  }, [isDarkMode]);
 
   useEffect(() => {
-    const brokerUrl = import.meta.env.VITE_TELEMETRY_WS_URL || DEFAULT_BROKER_URL;
-
-    const flushUpdates = () => {
-      if (pendingDevicesRef.current) {
-        setDevicesById(pendingDevicesRef.current);
-        pendingDevicesRef.current = null;
-      }
-      if (pendingEventsRef.current) {
-        recentEventsRef.current = pendingEventsRef.current;
-        setRecentEvents(pendingEventsRef.current);
-        pendingEventsRef.current = null;
-      }
-      if (pendingStatsRef.current) {
-        streamStatsRef.current = pendingStatsRef.current;
-        setStreamStats(pendingStatsRef.current);
-        pendingStatsRef.current = null;
-      }
-      if (pendingMessageAtRef.current) {
-        setLastMessageAt(pendingMessageAtRef.current);
-        pendingMessageAtRef.current = null;
-      }
-      updateTimerRef.current = null;
-    };
-
-    const scheduleUpdate = () => {
-      if (updateTimerRef.current === null) {
-        updateTimerRef.current = window.setTimeout(flushUpdates, UI_UPDATE_INTERVAL);
-      }
-    };
+    let messageBuffer = [];
 
     const client = new Client({
-      brokerURL: brokerUrl,
+      brokerURL: "ws://localhost:8080/ws-grid",
       reconnectDelay: 3000,
       onConnect: () => {
-        setIsConnected(true);
-        setConnectionError('');
-        client.subscribe(TELEMETRY_TOPIC, (message) => {
-          const receivedAt = new Date();
+        console.log("WebSocket connected successfully");
+        setConnected(true);
+        client.subscribe("/topic/telemetry", (message) => {
           if (!message.body) return;
           try {
-            const rawPayload = JSON.parse(message.body);
-            const deviceId = firstDefined(rawPayload.deviceId, rawPayload.device_id, rawPayload.id, rawPayload.payload?.deviceId, rawPayload.payload?.device_id);
-            const previous = deviceId ? devicesByIdRef.current[String(deviceId)] ?? {} : {};
-            const device = normalizeTelemetry(rawPayload, previous);
-            const event = normalizeEvent(rawPayload, receivedAt);
-            if (!device) return;
-
-            const nextDevices = { ...devicesByIdRef.current, [device.deviceId]: device };
-            const trimmedDevices = Object.keys(nextDevices).length > MAX_DEVICES
-              ? Object.fromEntries(Object.entries(nextDevices).slice(-MAX_DEVICES))
-              : nextDevices;
-            devicesByIdRef.current = trimmedDevices;
-
-            const nextEvents = [event, ...(pendingEventsRef.current || recentEventsRef.current)].slice(0, MAX_RECENT_EVENTS);
-            const previousStats = pendingStatsRef.current || streamStatsRef.current;
-            const processingMs = event.processingMs;
-            const latencyMs = event.latencyMs;
-            const nextStats = {
-              received: previousStats.received + 1,
-              processed: previousStats.processed + (event.status === 'PROCESSED' || event.status === 'SUCCESS' ? 1 : 0),
-              failed: previousStats.failed + (['FAILED', 'ERROR', 'REJECTED'].includes(event.status) ? 1 : 0),
-              processingTotal: previousStats.processingTotal + (processingMs ?? 0),
-              processingCount: previousStats.processingCount + (processingMs == null ? 0 : 1),
-              latencyTotal: previousStats.latencyTotal + (latencyMs ?? 0),
-              latencyCount: previousStats.latencyCount + (latencyMs == null ? 0 : 1),
-            };
-
-            pendingDevicesRef.current = trimmedDevices;
-            pendingEventsRef.current = nextEvents;
-            pendingStatsRef.current = nextStats;
-            recentEventsRef.current = nextEvents;
-            streamStatsRef.current = nextStats;
-            pendingMessageAtRef.current = receivedAt;
-            scheduleUpdate();
+            messageBuffer.push(JSON.parse(message.body));
           } catch (error) {
-            console.error('Unable to parse telemetry message:', error);
-            setConnectionError('Received an invalid telemetry message.');
+            console.error("Invalid telemetry message:", error, message.body);
+          }
+        });
+        client.subscribe("/topic/grid-state", (message) => {
+          if (!message.body) return;
+          try {
+            setGridSummary(JSON.parse(message.body));
+          } catch (error) {
+            console.error("Invalid grid-state message:", error, message.body);
           }
         });
       },
-      onDisconnect: () => setIsConnected(false),
-      onWebSocketClose: () => setIsConnected(false),
-      onWebSocketError: () => {
-        setIsConnected(false);
-        setConnectionError('Unable to reach the telemetry WebSocket.');
+      onWebSocketClose: () => {
+        console.log("WebSocket connection closed");
+        setConnected(false);
+      },
+      onDisconnect: () => {
+        console.log("WebSocket disconnected");
+        setConnected(false);
       },
       onStompError: (frame) => {
-        setIsConnected(false);
-        setConnectionError(frame.headers?.message || 'The telemetry broker returned an error.');
+        console.error("STOMP error:", frame.headers, frame.body);
+      },
+      onWebSocketError: (error) => {
+        console.error("WebSocket error:", error);
       },
     });
 
     client.activate();
+
+    const flushInterval = setInterval(() => {
+      if (messageBuffer.length === 0) return;
+      const currentBatch = [...messageBuffer];
+      messageBuffer = [];
+
+      setHouseholdMap((previousMap) => {
+        const updatedMap = { ...previousMap };
+        currentBatch.forEach((payload) => {
+          const houseId = payload.deviceId.replace("SOLAR-", "").replace("BATT-", "");
+          if (!updatedMap[houseId]) {
+            updatedMap[houseId] = {
+              houseId,
+              latitude: payload.latitude,
+              longitude: payload.longitude,
+              solar: null,
+              battery: null,
+            };
+          }
+          if (payload.deviceType === "SOLAR_PANEL") {
+            updatedMap[houseId].solar = payload;
+          } else if (payload.deviceType === "BATTERY") {
+            updatedMap[houseId].battery = payload;
+          }
+        });
+        return updatedMap;
+      });
+    }, 2500);
+
     return () => {
-      if (updateTimerRef.current !== null) window.clearTimeout(updateTimerRef.current);
+      clearInterval(flushInterval);
       client.deactivate();
     };
   }, []);
 
-  const totalSolarGeneration = devices.filter((device) => device.deviceType === 'SOLAR_PANEL').reduce((sum, device) => sum + device.outputWatts, 0);
-  const batteryDevices = devices.filter((device) => device.deviceType === 'BATTERY');
-  const averageBatteryLevel = batteryDevices.length ? batteryDevices.reduce((sum, device) => sum + device.batteryLevelPct, 0) / batteryDevices.length : 0;
-  const netGridBalance = devices.reduce((sum, device) => device.deviceType === 'SOLAR_PANEL' ? sum + device.outputWatts : device.deviceType === 'BATTERY' ? sum - device.outputWatts : sum, 0);
-  const successRate = streamStats.received ? ((streamStats.processed / streamStats.received) * 100) : 0;
-  const monitoringMetrics = {
-    recentEvents,
-    activeDevices: devices.length,
-    receivedEvents: streamStats.received,
-    processedEvents: streamStats.processed,
-    failedEvents: streamStats.failed,
-    throughputPerSecond: streamStats.received,
-    successRate,
-    averageProcessingMs: streamStats.processingCount ? streamStats.processingTotal / streamStats.processingCount : 0,
-    averageLatencyMs: streamStats.latencyCount ? streamStats.latencyTotal / streamStats.latencyCount : 0,
-    lastEventAt: lastMessageAt,
+  const households = Object.values(householdMap);
+  const totalSolarWatts = households.reduce((sum, h) => sum + (h.solar?.outputWatts || 0), 0);
+  const totalBatteryWatts = households.reduce((sum, h) => sum + (h.battery?.outputWatts || 0), 0);
+  const activeSelectedHouse = selectedHouseId ? householdMap[selectedHouseId] : null;
+
+  const handleSearch = (e) => {
+    e.preventDefault();
+    const term = searchInputRef.current?.value?.trim().toUpperCase();
+    if (!term) return;
+
+    const foundHouse = households.find(h =>
+      h.houseId.toUpperCase() === term || h.houseId.toUpperCase().includes(term)
+    );
+
+    if (foundHouse) {
+      setSelectedHouseId(foundHouse.houseId);
+    } else {
+      alert(`House "${term}" not found in current telemetry stream.`);
+    }
   };
 
-  return (
-    <div className={`app-shell ${isDark ? 'dark' : ''}`}>
-      <header className="app-header">
-        <div>
-          <p className="eyebrow">GRIDWEAVER · WEEK 3</p>
-          <h1>Maharashtra Microgrid Platform</h1>
-          <p className="app-subtitle">Kafka telemetry monitoring and high-performance GIS rendering</p>
-        </div>
-        <div className="app-header-actions">
-          <div className="connection-panel" aria-live="polite">
-            <span className={`connection-dot ${isConnected ? 'online' : 'offline'}`} aria-hidden="true" />
-            <div>
-              <strong>{isConnected ? 'Live stream connected' : 'Offline fallback'}</strong>
-              <span>{lastMessageAt ? lastMessageAt.toLocaleTimeString() : 'Waiting for telemetry'}</span>
-            </div>
-          </div>
-          <button type="button" className="theme-toggle" onClick={() => setIsDark((current) => !current)}>
-            {isDark ? 'Light mode' : 'Dark mode'}
-          </button>
-        </div>
-      </header>
+  const clearSearch = () => {
+    if (searchInputRef.current) searchInputRef.current.value = "";
+  };
 
-      <div className="stats-grid">
-        <div className="stat-card"><h3>Net Grid Balance</h3><p className="stat-value">{netGridBalance.toFixed(1)} W</p></div>
-        <div className="stat-card"><h3>Total Solar Generation</h3><p className="stat-value watts">{totalSolarGeneration.toFixed(1)} W</p></div>
-        <div className="stat-card"><h3>Avg Battery Level</h3><p className="stat-value battery">{averageBatteryLevel.toFixed(1)}%</p></div>
-        <div className="stat-card"><h3>Active Devices</h3><p className="stat-value">{devices.length.toLocaleString()}</p></div>
+  // --- Tesla-Inspired UI Variables ---
+  // Darker, smoother glass with stronger blur and almost invisible borders
+  const panelBg = isDarkMode ? "rgba(0, 0, 0, 0.65)" : "rgba(255, 255, 255, 0.85)";
+  const panelBorder = isDarkMode ? "1px solid rgba(255, 255, 255, 0.08)" : "1px solid rgba(0, 0, 0, 0.05)";
+  const textColor = isDarkMode ? "#ffffff" : "#000000";
+  const secondaryText = isDarkMode ? "#a1a1aa" : "#71717a";
+  const blurEffect = "blur(20px)"; // Premium frosted acrylic look
+
+  return (
+    <div style={{ width: "100vw", height: "100vh", position: "relative", overflow: "hidden", background: isDarkMode ? "#000000" : "#f4f4f5", fontFamily: "system-ui, -apple-system, sans-serif" }}>
+
+      {/* BASE LAYER: FULL SCREEN MAP */}
+      <div style={{ position: "absolute", inset: 0, zIndex: 1 }}>
+        <GridMap
+          households={households}
+          onHouseSelect={(id) => setSelectedHouseId(id)}
+          activeHouse={activeSelectedHouse}
+        />
       </div>
 
-      {connectionError && <p className="connection-error" role="status">{connectionError} Mock telemetry remains visible while the backend is unavailable.</p>}
+      {/* OVERLAY LAYER: UI PANELS */}
+      <div style={{ position: "absolute", inset: 0, zIndex: 2000, pointerEvents: "none" }}>
 
-      <MonitoringDashboard metrics={monitoringMetrics} />
+        {/* Top Header */}
+        <div
+          style={{
+            position: "absolute",
+            top: "24px",
+            left: "80px",
+            pointerEvents: "auto",
+            background: panelBg,
+            backdropFilter: blurEffect,
+            border: panelBorder,
+            padding: "12px 24px",
+            borderRadius: "20px",
+            boxShadow: "0 8px 32px rgba(0,0,0,0.12)"
+          }}
+        >
+          <h1 style={{ margin: 0, fontSize: "24px", fontWeight: "600", letterSpacing: "-0.5px", color: textColor }}>
+            GridWeaver
+          </h1>
+          <p style={{ margin: "2px 0 0", color: secondaryText, fontSize: "12px", fontWeight: "600", letterSpacing: "0.5px", textTransform: "uppercase" }}>
+            Maharashtra Energy Matrix
+          </p>
+        </div>
 
-      <main className="map-panel">
-        <GridMap devices={devices} />
-      </main>
+        {/* Search Bar (Sleek pill design) */}
+        <div style={{ position: "absolute", top: "24px", left: "50%", transform: "translateX(-50%)", pointerEvents: "auto" }}>
+          <form onSubmit={handleSearch} style={{ background: panelBg, backdropFilter: blurEffect, borderRadius: "30px", border: panelBorder, padding: "4px 8px", width: "400px", display: "flex", alignItems: "center", boxShadow: "0 8px 32px rgba(0,0,0,0.12)" }}>
+            <span style={{ paddingLeft: "12px", color: secondaryText }}>🔍</span>
+            <input
+              type="text"
+              placeholder="Search House ID..."
+              ref={searchInputRef}
+              style={{ border: "none", background: "transparent", color: textColor, width: "100%", padding: "12px", outline: "none", fontSize: "15px", fontWeight: "500" }}
+            />
+            <button type="button" onClick={clearSearch} style={{ background: "rgba(161, 161, 170, 0.2)", borderRadius: "50%", width: "28px", height: "28px", border: "none", color: textColor, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", marginRight: "4px" }}>✕</button>
+          </form>
+        </div>
+
+        {/* Top Controls Island */}
+        <div style={{ position: "absolute", top: "24px", right: "24px", display: "flex", gap: "12px", alignItems: "center", pointerEvents: "auto" }}>
+          <button onClick={() => setShowDashboard(!showDashboard)} style={{ background: showDashboard ? "#2563eb" : panelBg, backdropFilter: blurEffect, border: panelBorder, color: showDashboard ? "#ffffff" : textColor, padding: "10px 16px", borderRadius: "20px", cursor: "pointer", fontWeight: "600", fontSize: "13px", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}>
+            {showDashboard ? "Close dashboard" : "Dashboard"}
+          </button>
+          <button onClick={() => setIsDarkMode(!isDarkMode)} style={{ background: panelBg, backdropFilter: blurEffect, border: panelBorder, color: textColor, padding: "10px 16px", borderRadius: "20px", cursor: "pointer", fontWeight: "600", fontSize: "13px", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}>
+            {isDarkMode ? "Light" : "Dark"}
+          </button>
+          <div style={{ background: panelBg, backdropFilter: blurEffect, border: panelBorder, padding: "10px 16px", borderRadius: "20px", fontSize: "13px", fontWeight: "600", color: connected ? "#10b981" : "#ef4444", boxShadow: "0 4px 12px rgba(0,0,0,0.1)", display: "flex", alignItems: "center", gap: "6px" }}>
+            <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: connected ? "#10b981" : "#ef4444", boxShadow: `0 0 8px ${connected ? "#10b981" : "#ef4444"}` }}></div>
+            {connected ? "LIVE" : "OFFLINE"}
+          </div>
+        </div>
+
+        {/* FRONTEND DRAWER: additive integration; existing map and telemetry remain underneath */}
+        {showDashboard && (
+          <div style={{ position: "absolute", top: "92px", right: "24px", bottom: "118px", width: "min(440px, calc(100vw - 48px))", overflowY: "auto", display: "grid", alignContent: "start", gap: "14px", pointerEvents: "auto", borderRadius: "14px" }}>
+            <PowerFlow />
+            <EventLog />
+          </div>
+        )}
+
+        {/* Selected House Details Floating Card */}
+        {activeSelectedHouse && !showDashboard && (
+          <div style={{ position: "absolute", top: "100px", right: "24px", width: "320px", background: panelBg, backdropFilter: blurEffect, color: textColor, border: panelBorder, borderRadius: "16px", padding: "24px", boxShadow: "0 20px 40px rgba(0,0,0,0.2)", pointerEvents: "auto" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "20px" }}>
+              <div>
+                <strong style={{ fontSize: "18px", fontWeight: "600", display: "block" }}>{activeSelectedHouse.houseId}</strong>
+                <span style={{ fontSize: "12px", color: secondaryText, fontFamily: "monospace", letterSpacing: "0.5px" }}>{activeSelectedHouse.latitude.toFixed(4)}, {activeSelectedHouse.longitude.toFixed(4)}</span>
+              </div>
+              <button onClick={() => setSelectedHouseId(null)} style={{ background: "none", border: "none", color: secondaryText, cursor: "pointer", fontSize: "20px" }}>✕</button>
+            </div>
+
+            {/* Solar Data */}
+            <div style={{ marginBottom: "24px" }}>
+              <div style={{ fontSize: "11px", color: secondaryText, fontWeight: "700", letterSpacing: "1px", textTransform: "uppercase", marginBottom: "12px" }}>Solar Array</div>
+              {activeSelectedHouse.solar ? (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                  <div>
+                    <div style={{ fontSize: "12px", color: secondaryText, marginBottom: "4px" }}>Status</div>
+                    <div style={{ fontSize: "14px", fontWeight: 600, color: statusColors[activeSelectedHouse.solar.status] }}>{activeSelectedHouse.solar.status}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: "12px", color: secondaryText, marginBottom: "4px" }}>Output</div>
+                    <div style={{ fontSize: "18px", fontWeight: "600" }}>{(activeSelectedHouse.solar.outputWatts / 1000).toFixed(2)} <span style={{ fontSize: "12px", color: secondaryText }}>kW</span></div>
+                  </div>
+                </div>
+              ) : ( <div style={{ fontSize: "13px", color: secondaryText }}>Awaiting Telemetry...</div> )}
+            </div>
+
+            {/* Battery Data */}
+            <div>
+              <div style={{ fontSize: "11px", color: secondaryText, fontWeight: "700", letterSpacing: "1px", textTransform: "uppercase", marginBottom: "12px" }}>Powerwall Storage</div>
+              {activeSelectedHouse.battery ? (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                  <div>
+                    <div style={{ fontSize: "12px", color: secondaryText, marginBottom: "4px" }}>Status</div>
+                    <div style={{ fontSize: "14px", fontWeight: 600, color: statusColors[activeSelectedHouse.battery.status] }}>{activeSelectedHouse.battery.status}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: "12px", color: secondaryText, marginBottom: "4px" }}>Flow</div>
+                    <div style={{ fontSize: "18px", fontWeight: "600" }}>{(activeSelectedHouse.battery.outputWatts / 1000).toFixed(2)} <span style={{ fontSize: "12px", color: secondaryText }}>kW</span></div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: "12px", color: secondaryText, marginBottom: "4px" }}>Charge Level</div>
+                    <div style={{ fontSize: "18px", fontWeight: "600" }}>{activeSelectedHouse.battery.batteryLevelPct.toFixed(1)}<span style={{ fontSize: "12px", color: secondaryText }}>%</span></div>
+                  </div>
+                </div>
+              ) : ( <div style={{ fontSize: "13px", color: secondaryText }}>Awaiting Telemetry...</div> )}
+            </div>
+          </div>
+        )}
+
+        {/* Unified Bottom Dashboard Dock */}
+        <div style={{ position: "absolute", bottom: "32px", left: "50%", transform: "translateX(-50%)", pointerEvents: "auto", display: "flex", gap: "40px", background: panelBg, backdropFilter: blurEffect, border: panelBorder, padding: "20px 48px", borderRadius: "24px", boxShadow: "0 20px 40px rgba(0,0,0,0.2)" }}>
+
+          <div style={{ minWidth: "120px" }}>
+            <h3 style={{ margin: "0 0 4px 0", fontSize: "11px", color: secondaryText, fontWeight: "700", letterSpacing: "1px", textTransform: "uppercase" }}>Net Grid Balance</h3>
+            <div style={{ fontSize: "28px", fontWeight: "600", color: gridSummary?.netGridBalanceKw >= 0 ? '#10b981' : '#ef4444', letterSpacing: "-1px" }}>
+              {gridSummary ? `${gridSummary.netGridBalanceKw.toFixed(1)}` : '...'} <span style={{ fontSize: "16px", fontWeight: "500", color: secondaryText }}>kW</span>
+            </div>
+          </div>
+
+          <div style={{ width: "1px", background: isDarkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)" }}></div>
+
+          <div style={{ minWidth: "120px" }}>
+            <h3 style={{ margin: "0 0 4px 0", fontSize: "11px", color: secondaryText, fontWeight: "700", letterSpacing: "1px", textTransform: "uppercase" }}>Total Solar</h3>
+            <div style={{ fontSize: "28px", fontWeight: "600", color: textColor, letterSpacing: "-1px" }}>
+              {gridSummary ? `${gridSummary.totalSolarGenerationKw.toFixed(1)}` : `${(totalSolarWatts/1000).toFixed(1)}`} <span style={{ fontSize: "16px", fontWeight: "500", color: secondaryText }}>kW</span>
+            </div>
+          </div>
+
+          <div style={{ width: "1px", background: isDarkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)" }}></div>
+
+          <div style={{ minWidth: "120px" }}>
+            <h3 style={{ margin: "0 0 4px 0", fontSize: "11px", color: secondaryText, fontWeight: "700", letterSpacing: "1px", textTransform: "uppercase" }}>Total Battery</h3>
+            <div style={{ fontSize: "28px", fontWeight: "600", color: textColor, letterSpacing: "-1px" }}>
+              {gridSummary ? `${gridSummary.totalBatteryDemandKw.toFixed(1)}` : `${(totalBatteryWatts/1000).toFixed(1)}`} <span style={{ fontSize: "16px", fontWeight: "500", color: secondaryText }}>kW</span>
+            </div>
+          </div>
+
+          <div style={{ width: "1px", background: isDarkMode ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)" }}></div>
+
+          <div style={{ minWidth: "120px" }}>
+            <h3 style={{ margin: "0 0 4px 0", fontSize: "11px", color: secondaryText, fontWeight: "700", letterSpacing: "1px", textTransform: "uppercase" }}>Avg Capacity</h3>
+            <div style={{ fontSize: "28px", fontWeight: "600", color: textColor, letterSpacing: "-1px" }}>
+              {gridSummary ? `${gridSummary.averageBatterySocPercentage.toFixed(1)}` : '...'} <span style={{ fontSize: "16px", fontWeight: "500", color: secondaryText }}>%</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
     </div>
   );
 }
