@@ -1,10 +1,11 @@
 import { useEffect, useMemo } from "react";
-import { MapContainer, TileLayer, useMap } from "react-leaflet";
-import MarkerClusterGroup from "react-leaflet-cluster";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "leaflet.heat";
+import { MapContainer, TileLayer, useMap } from "react-leaflet";
+import MarkerClusterGroup from "react-leaflet-cluster";
 import HouseholdMarker from "./HouseholdMarker.jsx";
+
 
 const MAHARASHTRA_CENTER = [19.0, 77.0];
 
