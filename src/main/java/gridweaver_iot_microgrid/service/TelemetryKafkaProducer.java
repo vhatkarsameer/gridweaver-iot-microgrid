@@ -10,7 +10,7 @@ public class TelemetryKafkaProducer {
     private final KafkaTemplate<String, TelemetryPayload> kafkaTemplate;
 
     // The Kafka topic we will publish to
-    private static final String TOPIC = "telemetry-events";
+    private static final String TOPIC = "telemetry-events-v2";
 
     public TelemetryKafkaProducer(KafkaTemplate<String, TelemetryPayload> kafkaTemplate) {
         this.kafkaTemplate = kafkaTemplate;

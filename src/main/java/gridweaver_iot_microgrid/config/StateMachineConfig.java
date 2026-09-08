@@ -41,6 +41,11 @@ public class StateMachineConfig extends EnumStateMachineConfigurerAdapter<Device
                 .and()
                 .withExternal().source(DeviceStatus.DISCHARGING).target(DeviceStatus.IDLE).event(DeviceEvent.BATTERY_EMPTY)
                 .and()
+                .withExternal().source(DeviceStatus.CHARGING).target(DeviceStatus.DISCHARGING).event(DeviceEvent.GRID_DEFICIT)
+                .and()
+                .withExternal().source(DeviceStatus.DISCHARGING).target(DeviceStatus.CHARGING).event(DeviceEvent.GRID_SURPLUS)
+                .and()
+
 
                 // Fault handling (Can happen from any active state)
                 .withExternal().source(DeviceStatus.IDLE).target(DeviceStatus.FAULT).event(DeviceEvent.SYSTEM_ERROR)
