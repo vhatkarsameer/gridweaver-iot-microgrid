@@ -1,44 +1,86 @@
-import React, { useMemo } from "react";
-import { Marker } from "react-leaflet";
+import { memo, useMemo } from "react";
+import { Marker, Popup } from "react-leaflet";
 import L from "leaflet";
 
-const HouseholdMarker = React.memo(({ household, onSelect }) => {
-  const hasFault = household.solar?.status === "FAULT" || household.battery?.status === "FAULT";
-  const isGenerating = household.solar?.outputWatts > 0;
+function toNumber(value, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
 
-  const color = hasFault ? "#ef4444" : (isGenerating ? "#10b981" : "#3b82f6");
+const HouseholdMarker = memo(
+  function HouseholdMarker({ household, onSelect }) {
+    if (!household) return null;
 
-  // A highly optimized HTML icon that works perfectly with the clusterer
-  const markerIcon = useMemo(() =>
-    L.divIcon({
-      className: "gridweaver-dot",
-      html: `<div style="width: 14px; height: 14px; background: ${color}; border-radius: 50%; border: 2px solid #ffffff; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>`,
-      iconSize: [14, 14],
-      iconAnchor: [7, 7],
-    }),
-  [color]);
+    const latitude = toNumber(household.latitude ?? household.lat, NaN);
+    const longitude = toNumber(household.longitude ?? household.lng ?? household.lon, NaN);
 
-  return (
-    <Marker
-      position={[household.latitude, household.longitude]}
-      icon={markerIcon}
-      eventHandlers={{
-        click: (e) => {
-          L.DomEvent.stopPropagation(e);
-          if (onSelect) onSelect(household.houseId);
-        },
-      }}
-    />
-  );
-}, (prevProps, nextProps) => {
-  // THE SILVER BULLET:
-  // If the wattage changes but the visual color category stays the same, block the render!
-  const getStatus = (h) => {
-    const fault = h.solar?.status === "FAULT" || h.battery?.status === "FAULT";
-    const gen = h.solar?.outputWatts > 0;
-    return fault ? "red" : (gen ? "green" : "blue");
-  };
-  return getStatus(prevProps.household) === getStatus(nextProps.household);
-});
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      return null;
+    }
+
+    const solar = household.solar || {};
+    const battery = household.battery || {};
+    const houseId = household.houseId || household.deviceId || "Unknown household";
+
+    const hasFault = solar.status === "FAULT" || battery.status === "FAULT";
+    const isGenerating = toNumber(solar.outputWatts) > 0;
+    const color = hasFault ? "#ef4444" : isGenerating ? "#10b981" : "#3b82f6";
+
+    const markerIcon = useMemo(
+      () =>
+        L.divIcon({
+          className: "gridweaver-household-marker",
+          html: `<div style="width:14px;height:14px;background:${color};border:2px solid #ffffff;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,.35)"></div>`,
+          iconSize: [18, 18],
+          iconAnchor: [9, 9],
+          popupAnchor: [0, -10],
+        }),
+      [color]
+    );
+
+    const generationKw = toNumber(solar.outputWatts) / 1000;
+    const consumptionKw = toNumber(household.consumptionWatts ?? battery.outputWatts) / 1000;
+    const batteryLevelPct = toNumber(household.batteryLevelPct ?? battery.batteryLevelPct);
+
+    return (
+      <Marker
+        position={[latitude, longitude]}
+        icon={markerIcon}
+        eventHandlers={{
+          click: (event) => {
+            L.DomEvent.stopPropagation(event);
+            onSelect?.(houseId);
+          },
+        }}
+      >
+        <Popup>
+          <div className="household-popup">
+            <strong>{houseId}</strong>
+            <span>Generation: {generationKw.toFixed(2)} kW</span>
+            <span>Consumption: {consumptionKw.toFixed(2)} kW</span>
+            <span>Battery: {batteryLevelPct.toFixed(1)}%</span>
+            <span>Solar status: {solar.status || "WAITING"}</span>
+            <span>Battery status: {battery.status || "WAITING"}</span>
+          </div>
+        </Popup>
+      </Marker>
+    );
+  },
+  (previousProps, nextProps) => {
+    const previous = previousProps.household;
+    const next = nextProps.household;
+    return (
+      previous?.houseId === next?.houseId &&
+      previous?.latitude === next?.latitude &&
+      previous?.longitude === next?.longitude &&
+      previous?.solar?.status === next?.solar?.status &&
+      previous?.battery?.status === next?.battery?.status &&
+      previous?.solar?.outputWatts === next?.solar?.outputWatts &&
+      previous?.battery?.outputWatts === next?.battery?.outputWatts &&
+      previous?.battery?.batteryLevelPct === next?.battery?.batteryLevelPct &&
+      previousProps.onSelect === nextProps.onSelect
+    );
+  }
+);
 
 export default HouseholdMarker;
