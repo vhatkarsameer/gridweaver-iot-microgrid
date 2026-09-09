@@ -460,3 +460,8 @@
     transition: none;
   }
 }
+
+.week4-dashboard-drawer { position: absolute; top: 78px; right: 24px; bottom: 96px; z-index: 2; width: min(520px, calc(100vw - 48px)); display: grid; align-content: start; gap: 14px; overflow-y: auto; pointer-events: auto; padding: 2px; }
+.dashboard-event-count { align-self: center; color: #7890a9; font: 10px monospace; }
+.dashboard-event-copy small { display: block; margin-top: 5px; color: #55708a; font: 9px monospace; }
+@media (max-width: 700px) { .week4-dashboard-drawer { top: 72px; right: 12px; bottom: 84px; width: calc(100vw - 24px); } }

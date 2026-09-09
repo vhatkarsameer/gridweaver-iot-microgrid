@@ -2,6 +2,26 @@ import React, { useEffect, useState, useRef, useMemo } from "react";
 import { Client } from "@stomp/stompjs";
 import "./App.css";
 import GridMap from "./components/GridMap.jsx";
+import EventLog from "./components/EventLog.jsx";
+import PowerFlow from "./components/PowerFlow.jsx";
+import "./components/dashboard.css";
+
+function telemetryEvent(payload, previousStatus) {
+  const deviceId = payload.deviceId || "unknown-device";
+  const houseId = deviceId.replace("SOLAR-", "").replace("BATT-", "");
+  const status = String(payload.status || "UNKNOWN").toUpperCase();
+  const changed = previousStatus && previousStatus !== status;
+  return {
+    id: `${deviceId}-${payload.timestamp || Date.now()}-${Math.random()}`,
+    time: payload.timestamp ? new Date(payload.timestamp).toLocaleTimeString() : new Date().toLocaleTimeString(),
+    type: changed ? "STATE CHANGE" : "TELEMETRY",
+    region: houseId,
+    deviceId,
+    deviceType: payload.deviceType || "UNKNOWN",
+    message: changed ? `${deviceId} changed from ${previousStatus} to ${status}` : `${deviceId} reported ${status}`,
+    status: status === "FAULT" ? "warning" : changed ? "info" : "success",
+  };
+}
 
 const statusColors = {
   IDLE: "#64748b",
@@ -17,6 +37,8 @@ export default function App() {
   const [connected, setConnected] = useState(false);
   const [gridSummary, setGridSummary] = useState(null);
   const [selectedHouseId, setSelectedHouseId] = useState(null);
+  const [showDashboard, setShowDashboard] = useState(false);
+  const [liveEvents, setLiveEvents] = useState([]);
   const searchInputRef = useRef(null);
 
   useEffect(() => {
@@ -26,6 +48,7 @@ export default function App() {
 
   useEffect(() => {
     let messageBuffer = [];
+    const lastStatuses = new Map();
 
     const client = new Client({
       brokerURL: import.meta.env.VITE_TELEMETRY_WS_URL || "ws://localhost:8080/ws-grid",
@@ -35,7 +58,14 @@ export default function App() {
         client.subscribe("/topic/telemetry", (message) => {
           if (!message.body) return;
           try {
-            messageBuffer.push(JSON.parse(message.body));
+            const payload = JSON.parse(message.body);
+            const previousStatus = lastStatuses.get(payload.deviceId);
+            const nextStatus = String(payload.status || "UNKNOWN").toUpperCase();
+            if (!previousStatus || previousStatus !== nextStatus) {
+              setLiveEvents((previous) => [telemetryEvent(payload, previousStatus), ...previous].slice(0, 60));
+            }
+            lastStatuses.set(payload.deviceId, nextStatus);
+            messageBuffer.push(payload);
           } catch (error) {
             console.error("Invalid telemetry message:", error);
           }
@@ -178,6 +208,9 @@ export default function App() {
 
         {/* Top Controls */}
         <div style={{ position: "absolute", top: "20px", right: "24px", display: "flex", gap: "10px", alignItems: "center", pointerEvents: "auto" }}>
+          <button onClick={() => setShowDashboard((value) => !value)} style={{ background: showDashboard ? "#2563eb" : panelBg, backdropFilter: blurEffect, border: panelBorder, color: showDashboard ? "#ffffff" : textColor, padding: "8px 14px", borderRadius: "16px", cursor: "pointer", fontWeight: "600", fontSize: "12px" }}>
+            {showDashboard ? "Close dashboard" : "Week 4 dashboard"}
+          </button>
           <button onClick={() => setIsDarkMode((d) => !d)} style={{ background: panelBg, backdropFilter: blurEffect, border: panelBorder, color: textColor, padding: "8px 14px", borderRadius: "16px", cursor: "pointer", fontWeight: "600", fontSize: "12px" }}>
             {isDarkMode ? "Light Mode" : "Dark Mode"}
           </button>
@@ -186,6 +219,13 @@ export default function App() {
             {connected ? "LIVE" : "OFFLINE"}
           </div>
         </div>
+
+        {showDashboard && (
+          <div className="week4-dashboard-drawer" role="region" aria-label="Week 4 live dashboard">
+            <PowerFlow gridSummary={gridSummary} households={households} />
+            <EventLog events={liveEvents} />
+          </div>
+        )}
 
         {/* Selected House Card */}
         {activeSelectedHouse && (
