@@ -1,6 +1,7 @@
 package gridweaver_iot_microgrid.DTO;
 
 import java.time.Instant;
+import java.util.Map;
 
 public record GridStateSummary(
         Instant timestamp,
@@ -10,5 +11,6 @@ public record GridStateSummary(
         double totalBatteryDemandKw,
         double netGridBalanceKw,
         double averageBatterySocPercentage,
-        double gridLoadPercentage
+        double gridLoadPercentage,
+        Map<String, Double> regionalNetPower
 ) { }

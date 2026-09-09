@@ -12,17 +12,15 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class DeviceStateProcessor {
-
     private final StateMachineFactory<DeviceStatus, DeviceEvent> stateMachineFactory;
-
-    // In-memory cache to hold a unique state machine for every single device
+    private final AuditLogService auditLogService;
     private final ConcurrentHashMap<String, StateMachine<DeviceStatus, DeviceEvent>> machineCache = new ConcurrentHashMap<>();
 
-    public DeviceStateProcessor(StateMachineFactory<DeviceStatus, DeviceEvent> stateMachineFactory) {
+    public DeviceStateProcessor(StateMachineFactory<DeviceStatus, DeviceEvent> stateMachineFactory, AuditLogService auditLogService) {
         this.stateMachineFactory = stateMachineFactory;
+        this.auditLogService = auditLogService;
     }
 
-    // Update the method signature and battery logic:
     public DeviceStatus processAndGetState(TelemetryPayload payload, double currentGridLoadPct) {
         StateMachine<DeviceStatus, DeviceEvent> sm = machineCache.computeIfAbsent(payload.deviceId(), id -> {
             StateMachine<DeviceStatus, DeviceEvent> newMachine = stateMachineFactory.getStateMachine(id);
@@ -40,7 +38,17 @@ public class DeviceStateProcessor {
                 eventToFire = payload.batteryLevelPct() < 100 ? DeviceEvent.GRID_SURPLUS : DeviceEvent.BATTERY_FULL;
         }
 
-        if (eventToFire != null) sm.sendEvent(eventToFire);
-        return sm.getState().getId();
+        if (eventToFire != null) {
+            sm.sendEvent(eventToFire);
+        }
+
+        DeviceStatus newState = sm.getState().getId();
+
+        // Trigger the audit log if the state actually transitioned
+        if (payload.status() != newState) {
+            auditLogService.logStateTransition(payload.deviceId(), payload.status().name(), newState.name());
+        }
+
+        return newState;
     }
 }

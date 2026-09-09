@@ -174,8 +174,8 @@ export default function App() {
         <div
           style={{
             position: "absolute",
-            top: "20px",
-            left: "24px",
+            top: "15px",
+            left: "60px",
             pointerEvents: "auto",
             background: panelBg,
             backdropFilter: blurEffect,

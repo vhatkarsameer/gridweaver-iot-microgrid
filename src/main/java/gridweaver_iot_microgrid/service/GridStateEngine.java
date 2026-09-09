@@ -46,8 +46,8 @@ public class GridStateEngine {
                 ));
     }
 
-    public GridStateSummary calculateGridSummary() {
+    public GridStateSummary calculateGridSummary(Map<String, Double> regionalNetPower) {
         double engineLoad = getCurrentGridLoadPercentage();
-        return GridStateMapper.toGridStateSummary(latestDeviceTelemetry.values(), engineLoad);
+        return GridStateMapper.toGridStateSummary(latestDeviceTelemetry.values(), engineLoad, regionalNetPower);
     }
 }

@@ -9,7 +9,7 @@ public class AuditLogService {
 
     private static final Logger auditLogger = LoggerFactory.getLogger("GRID_AUDIT");
 
-    private void logStateTransition(String deviceId, String oldState, String newState) {
+    public void logStateTransition(String deviceId, String oldState, String newState) {
         auditLogger.info("STATE_CHANGE | Device: {} | Transition: {} -> {}", deviceId, oldState, newState);
     }
 

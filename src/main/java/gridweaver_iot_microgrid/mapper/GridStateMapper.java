@@ -6,13 +6,14 @@ import gridweaver_iot_microgrid.model.TelemetryPayload;
 
 import java.time.Instant;
 import java.util.Collection;
+import java.util.Map;
 
 public class GridStateMapper {
 
-    public static GridStateSummary toGridStateSummary(Collection<TelemetryPayload> payloads, double currentGridLoad) {
+    public static GridStateSummary toGridStateSummary(Collection<TelemetryPayload> payloads, double currentGridLoad, Map<String, Double> regionalNetPower) {
 
         if(payloads == null || payloads.isEmpty()) {
-            return new GridStateSummary(Instant.now(), 0, 0, 0.0, 0.0, 0.0, 0.0, 0.0);
+            return new GridStateSummary(Instant.now(), 0, 0, 0.0, 0.0, 0.0, 0.0, 0.0, regionalNetPower);
         }
 
         int activeDevices = payloads.size();
@@ -44,7 +45,8 @@ public class GridStateMapper {
                 round(totalBatteryWatts/1000.0),
                 round(netBalanceWatts/1000.0),
                 round(averageBatteryLevelPct),
-                round(currentGridLoad)
+                round(currentGridLoad),
+                regionalNetPower
         );
     }
 

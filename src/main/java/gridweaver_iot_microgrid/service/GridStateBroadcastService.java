@@ -23,14 +23,16 @@ public class GridStateBroadcastService {
 
     @Scheduled(fixedRate = 1000)
     public void broadcastGridState() {
-        GridStateSummary summary = gridStateEngine.calculateGridSummary();
-
-        // Fetch live grouped Map/Reduce telemetry
+        // 1. Fetch live grouped Map/Reduce telemetry
         Map<String, Double> realRegionalNetPower = gridStateEngine.getRegionalNetPowerMap();
 
-        // Execute distributed routing logic based on actual data
+        // 2. Execute distributed routing logic based on actual data
         regionalBalanceService.balanceGrid(realRegionalNetPower);
 
+        // 3. Generate the summary using the post-balanced regional data
+        GridStateSummary summary = gridStateEngine.calculateGridSummary(realRegionalNetPower);
+
+        // 4. Broadcast to WebSocket
         messagingTemplate.convertAndSend("/topic/grid-state", summary);
     }
 }
