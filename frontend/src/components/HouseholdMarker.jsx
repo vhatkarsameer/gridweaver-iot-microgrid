@@ -13,7 +13,6 @@ const HouseholdMarker = memo(
 
     const latitude = toNumber(household.latitude ?? household.lat, NaN);
     const longitude = toNumber(household.longitude ?? household.lng ?? household.lon, NaN);
-
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
       return null;
     }
@@ -24,6 +23,7 @@ const HouseholdMarker = memo(
 
     const hasFault = solar.status === "FAULT" || battery.status === "FAULT";
     const isGenerating = toNumber(solar.outputWatts) > 0;
+
     const color = hasFault ? "#ef4444" : isGenerating ? "#10b981" : "#3b82f6";
 
     const markerIcon = useMemo(

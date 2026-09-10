@@ -116,7 +116,7 @@ export default function App() {
         });
         return updatedMap;
       });
-    }, 1000);
+    }, 5000);
 
     return () => {
       clearInterval(flushInterval);
@@ -209,7 +209,7 @@ export default function App() {
         {/* Top Controls */}
         <div style={{ position: "absolute", top: "20px", right: "24px", display: "flex", gap: "10px", alignItems: "center", pointerEvents: "auto" }}>
           <button onClick={() => setShowDashboard((value) => !value)} style={{ background: showDashboard ? "#2563eb" : panelBg, backdropFilter: blurEffect, border: panelBorder, color: showDashboard ? "#ffffff" : textColor, padding: "8px 14px", borderRadius: "16px", cursor: "pointer", fontWeight: "600", fontSize: "12px" }}>
-            {showDashboard ? "Close dashboard" : "Week 4 dashboard"}
+            {showDashboard ? "Close Analytics" : "Live Analytics"}
           </button>
           <button onClick={() => setIsDarkMode((d) => !d)} style={{ background: panelBg, backdropFilter: blurEffect, border: panelBorder, color: textColor, padding: "8px 14px", borderRadius: "16px", cursor: "pointer", fontWeight: "600", fontSize: "12px" }}>
             {isDarkMode ? "Light Mode" : "Dark Mode"}
@@ -305,6 +305,13 @@ export default function App() {
             <h3 style={{ margin: "0 0 2px 0", fontSize: "10px", color: secondaryText, fontWeight: "700", letterSpacing: "1px", textTransform: "uppercase" }}>Avg Charge</h3>
             <div style={{ fontSize: "22px", fontWeight: "700", color: textColor }}>
               {gridSummary ? `${gridSummary.averageBatterySocPercentage.toFixed(1)}%` : "..."}
+            </div>
+          </div>
+          <div style={{ width: "1px", background: panelBorder }} />
+          <div style={{ minWidth: "110px", textAlign: "center" }}>
+            <h3 style={{ margin: "0 0 2px 0", fontSize: "10px", color: secondaryText, fontWeight: "700", letterSpacing: "1px", textTransform: "uppercase" }}>Grid Load</h3>
+            <div style={{ fontSize: "22px", fontWeight: "700", color: textColor }}>
+              {gridSummary ? `${gridSummary.gridLoadPercentage.toFixed(1)}%` : "..."}
             </div>
           </div>
         </div>

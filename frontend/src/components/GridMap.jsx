@@ -71,7 +71,7 @@ export default function GridMap({ households, onHouseSelect, activeHouse }) {
     <section className="grid-map-shell">
       <MapContainer
         center={MAHARASHTRA_CENTER}
-        zoom={7}
+        zoom={9}
         minZoom={6}
         maxZoom={18}
         scrollWheelZoom={true}
@@ -89,9 +89,7 @@ export default function GridMap({ households, onHouseSelect, activeHouse }) {
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          updateWhenZooming={false}
-          updateWhenIdle={true}
-          keepBuffer={1}
+          keepBuffer={8}
         />
 
         {/* Generation Layer: Green to Yellow */}
@@ -130,13 +128,13 @@ export default function GridMap({ households, onHouseSelect, activeHouse }) {
             const solarStatus = house.solar?.status || "WAITING";
             const batteryStatus = house.battery?.status || "WAITING";
             return (
-              <HouseholdMarker
-                key={`${house.houseId}-${solarStatus}-${batteryStatus}`}
-                household={house}
-                onSelect={onHouseSelect}
-              />
-            );
-          })}
+                          <HouseholdMarker
+                            key={house.houseId}
+                            household={house}
+                            onSelect={onHouseSelect}
+                          />
+                        );
+                      })}
         </MarkerClusterGroup>
       </MapContainer>
 

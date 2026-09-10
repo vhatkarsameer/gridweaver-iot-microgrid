@@ -67,7 +67,7 @@ public class IotSimulatorService {
 
         while (!Thread.currentThread().isInterrupted()) {
             try {
-                Thread.sleep(30000 + random.nextInt(30000));
+                Thread.sleep(120000 + random.nextInt(60000));
 
                 TelemetryPayload payload;
                 if (deviceType == DeviceType.SOLAR_PANEL) {

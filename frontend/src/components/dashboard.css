@@ -461,6 +461,25 @@
   }
 }
 
+.dashboard-event-list {
+  max-height: 380px;
+  overflow-y: auto;
+  scrollbar-color: #315473 #091727;
+  scrollbar-width: thin;
+}
+
+/* Custom scrollbar styling for Chrome/Edge/Safari */
+.dashboard-event-list::-webkit-scrollbar {
+  width: 7px;
+}
+.dashboard-event-list::-webkit-scrollbar-track {
+  background: #091727;
+}
+.dashboard-event-list::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: #315473;
+}
+
 .week4-dashboard-drawer { position: absolute; top: 78px; right: 24px; bottom: 96px; z-index: 2; width: min(520px, calc(100vw - 48px)); display: grid; align-content: start; gap: 14px; overflow-y: auto; pointer-events: auto; padding: 2px; }
 .dashboard-event-count { align-self: center; color: #7890a9; font: 10px monospace; }
 .dashboard-event-copy small { display: block; margin-top: 5px; color: #55708a; font: 9px monospace; }
